@@ -1,8 +1,11 @@
 # bilikara
+---
 
-`bilikara` 是一个面向 host 端的 B 站建议卡拉 OK 原型。当前版本已经实现：
+`bilikara` 是一个基于 B 站卡拉 OK 视频的点歌平台。主要由 OpenAI Codex 协助设计与实现，并经过人工整理、验证与迭代。
 
-- 通过 B 站视频 URL 加入列表
+当前版本已经实现：
+
+- 通过 B 站视频链接或 BV 号加入列表（只支持链接指定分 p）
 - 在线外挂播放器模式
 - 本地缓存播放器模式
 - 默认加到列表末尾 / 插队到下一首
@@ -16,24 +19,16 @@
 
 ![demo](demo.png "demo")
 
-## 项目说明
+## 启动
+**可执行文件**
+带 tag 的版本通过 GitHub Actions 打包，在 Releases 下载对应平台的压缩包，直接运行可执行文件。
 
-- 本项目当前版本主要由 OpenAI Codex 协助设计与实现，并经过人工整理、验证与迭代
-- 如果你继续基于这个仓库开发，建议在提交记录或 `README` 中保留后续人工修改说明，方便追踪演进
-
-## 一键启动
-
+**脚本启动**
 ```bash
-python3 -m bilikara
+python start_bilikara.py
 ```
 
-或：
-
-```bash
-python3 start_bilikara.py
-```
-
-或：
+或 (Ubuntu)
 
 ```bash
 ./start_bilikara.sh
@@ -41,20 +36,13 @@ python3 start_bilikara.py
 
 启动后会自动打开浏览器；如果默认端口被占用，会自动尝试后续端口。
 
-`python3 server.py`、`python3 start_bilikara.py` 和 `python3 -m bilikara` 现在都会走同一套默认启动逻辑，只是保留了不同入口，方便兼容旧习惯。
-通过一键启动打开的本地页面全部关闭后，服务会在几秒内自动退出。
-
-## 兼容运行
-
-```bash
-python3 server.py
-```
+打开的本地页面全部关闭后，服务会在几秒内自动退出。
 
 默认优先尝试 `http://127.0.0.1:8080`，如果端口被占用会自动往后找可用端口。
 
 ## 本地打包
 
-需要本地安装 Python，打包后得到可执行文件。
+需要本地安装 Python，打包后得到可一键运行的可执行文件。
 
 - Windows：`build_windows.bat`
 - macOS：`build_macos.command`
@@ -103,6 +91,26 @@ python3 server.py
 - 本地缓存依赖运行环境能访问 B 站和 GitHub Release (下载 BBDown)
 - `FFmpeg` 状态会显示在右上角 `BBDown` 展开面板中，方便定位“BBDown 已就绪但混流失败”这类问题
 - 为了让本地播放支持拖动和快进，后端对缓存媒体实现了 `Range` 请求支持
+- **仅在 Ubuntu (ssh) 和 Windows 平台测试过。我不会前端，全是 Codex 写的。**
+
+## Roadmap
+**Core**
+- Client 端
+  - [ ] 方案待定
+
+**Functional**
+- BBDown / FFmpeg 相关
+  - [ ] 增加清晰度选择
+  - [ ] 大会员清晰度
+  - [ ] 多分 p 音轨下载
+- 搜歌相关
+  - [ ] 分 p 选择
+  - [ ] 分 p 标题正则，确认 On / Off
+  - [ ] 过滤无用分 p
+- Misc.
+  - [ ] 切换分 p / 音轨
+  - [ ] 记录 / 显示对应视频 up 主
+  - [ ] 视频标题 normalization
 
 ## License
 
