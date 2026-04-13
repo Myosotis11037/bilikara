@@ -46,7 +46,6 @@ class AppContext:
         self.auto_restored_backup = self.store.restore_backup()
         self.cache_manager = CacheManager(self.store, max_cache_items=MAX_CACHE_ITEMS)
         self.cache_manager.prepare_session()
-        self.cache_manager.prewarm_binary()
         self._closed = False
         self._server: ThreadingHTTPServer | None = None
         self._host = HOST
@@ -59,16 +58,18 @@ class AppContext:
         self._shutdown_requested = False
         self._client_grace_seconds = 4.0
         self._client_stale_seconds = 120.0
-        self._client_watchdog = threading.Thread(target=self._client_watchdog_loop, daemon=True)
-        self._client_watchdog.start()
-        self._owner_enrichment = threading.Thread(target=self._owner_enrichment_loop, daemon=True)
-        self._owner_enrichment.start()
+        self._client_watchdog: threading.Thread | None = None
+        self._owner_enrichment: threading.Thread | None = None
         self._player_control_lock = threading.RLock()
         self._player_control_seq = 0
         self._player_control_ack_seq = 0
         self._player_control_command: dict[str, object] | None = None
         self._player_status_lock = threading.RLock()
         self._player_status: dict[str, object] | None = None
+        self._remote_access_lock = threading.RLock()
+        self._remote_access = self._build_remote_access_payload(self._host, self._port, [])
+        self._startup_lock = threading.RLock()
+        self._startup_started = False
 
     def snapshot(self) -> dict:
         payload = self.store.snapshot()
@@ -222,19 +223,14 @@ class AppContext:
             self._client_seen_once = False
             self._no_clients_since = None
             self._shutdown_requested = False
+        with self._remote_access_lock:
+            self._remote_access = self._build_remote_access_payload(self._host, self._port, [])
+        self._start_background_tasks_once()
+        threading.Thread(target=self._refresh_remote_access_snapshot, daemon=True).start()
 
     def remote_access_snapshot(self) -> dict[str, object]:
-        host = self._host
-        port = self._port
-        browser_host = "127.0.0.1" if host == "0.0.0.0" else host
-        local_url = f"http://{browser_host}:{port}/remote"
-        lan_urls = [f"{base}/remote" for base in _network_access_urls(host, port)]
-        preferred_url = lan_urls[0] if lan_urls else local_url
-        return {
-            "local_url": local_url,
-            "lan_urls": lan_urls,
-            "preferred_url": preferred_url,
-        }
+        with self._remote_access_lock:
+            return dict(self._remote_access)
 
     def touch_client(self, client_id: str) -> None:
         client_key = str(client_id or "").strip()
@@ -313,6 +309,41 @@ class AppContext:
                 owner_name=owner_name,
                 owner_url=owner_url,
             )
+
+    def _start_background_tasks_once(self) -> None:
+        with self._startup_lock:
+            if self._startup_started or self._closed:
+                return
+            self._startup_started = True
+            self.cache_manager.prewarm_binary()
+            self._client_watchdog = threading.Thread(target=self._client_watchdog_loop, daemon=True)
+            self._client_watchdog.start()
+            self._owner_enrichment = threading.Thread(target=self._owner_enrichment_loop, daemon=True)
+            self._owner_enrichment.start()
+
+    def _refresh_remote_access_snapshot(self) -> None:
+        host = self._host
+        port = self._port
+        lan_urls = [f"{base}/remote" for base in _network_access_urls(host, port)]
+        with self._remote_access_lock:
+            if host != self._host or port != self._port:
+                return
+            self._remote_access = self._build_remote_access_payload(host, port, lan_urls)
+
+    @staticmethod
+    def _build_remote_access_payload(
+        host: str,
+        port: int,
+        lan_urls: list[str],
+    ) -> dict[str, object]:
+        browser_host = "127.0.0.1" if host == "0.0.0.0" else host
+        local_url = f"http://{browser_host}:{port}/remote"
+        preferred_url = lan_urls[0] if lan_urls else local_url
+        return {
+            "local_url": local_url,
+            "lan_urls": list(lan_urls),
+            "preferred_url": preferred_url,
+        }
 
 
 CONTEXT = AppContext()
@@ -638,9 +669,6 @@ def _serve(
     url = f"http://{browser_host}:{actual_port}"
     print(f"{status_label} running on {url}")
     print(f"{status_label} mobile remote: {url}/remote")
-    for access_url in _network_access_urls(host, actual_port):
-        print(f"{status_label} LAN access: {access_url}")
-        print(f"{status_label} mobile remote (LAN): {access_url}/remote")
 
     if auto_open_browser:
         threading.Timer(0.8, lambda: webbrowser.open(url)).start()
@@ -660,7 +688,7 @@ def run(
     port: int = PORT,
     open_browser: bool = True,
     auto_select_port: bool = True,
-    shutdown_on_last_client: bool | None = False,
+    shutdown_on_last_client: bool | None = True,
 ) -> None:
     close_when_browser_exits = False if shutdown_on_last_client is None else shutdown_on_last_client
     _serve(
