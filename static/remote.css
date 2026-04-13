@@ -36,6 +36,10 @@ textarea {
   font: inherit;
 }
 
+.hidden {
+  display: none !important;
+}
+
 .remote-shell {
   width: min(720px, 100%);
   margin: 0 auto;
@@ -98,9 +102,20 @@ h1 {
   margin-bottom: 12px;
 }
 
+.panel-head-stack {
+  align-items: flex-start;
+}
+
+.list-heading {
+  margin-top: 6px;
+  font-size: 22px;
+  line-height: 1.15;
+}
+
 .muted,
 .message,
-.queue-note {
+.queue-note,
+.history-meta {
   color: var(--muted);
 }
 
@@ -135,7 +150,8 @@ textarea:focus {
   box-shadow: 0 0 0 4px rgba(202, 91, 60, 0.1);
 }
 
-.action-row {
+.action-row,
+.history-actions {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 10px;
@@ -143,7 +159,8 @@ textarea:focus {
 
 .primary-button,
 .secondary-button,
-.ghost-button {
+.ghost-button,
+.toggle-button {
   border: none;
   border-radius: 16px;
   padding: 12px 14px;
@@ -156,7 +173,8 @@ textarea:focus {
 }
 
 .secondary-button,
-.ghost-button {
+.ghost-button,
+.toggle-button {
   background: rgba(255, 255, 255, 0.82);
   color: var(--ink);
 }
@@ -185,14 +203,37 @@ textarea:focus {
   white-space: nowrap;
 }
 
+.view-toggle {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-bottom: 14px;
+  padding: 6px;
+  border-radius: 18px;
+  background: rgba(67, 53, 41, 0.06);
+}
+
+.toggle-button {
+  padding: 11px 12px;
+  background: transparent;
+  color: var(--muted);
+  transition: background 0.18s ease, color 0.18s ease, transform 0.18s ease;
+}
+
+.toggle-button.active {
+  background: rgba(255, 255, 255, 0.95);
+  color: var(--accent-deep);
+  box-shadow: 0 8px 18px rgba(79, 56, 39, 0.08);
+}
+
 .list {
   display: grid;
   gap: 10px;
 }
 
-.queue-item {
+.queue-item,
+.history-item {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
   gap: 12px;
   align-items: center;
   padding: 14px;
@@ -201,7 +242,16 @@ textarea:focus {
   border: 1px solid rgba(67, 53, 41, 0.08);
 }
 
-.queue-title {
+.queue-item {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.history-item {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.queue-title,
+.history-title {
   font-size: 15px;
   line-height: 1.35;
 }
@@ -210,6 +260,15 @@ textarea:focus {
   margin-top: 6px;
   font-size: 13px;
   line-height: 1.45;
+}
+
+.history-meta {
+  margin-top: 8px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  font-size: 13px;
+  line-height: 1.4;
 }
 
 .queue-item.ready .queue-state {
@@ -223,6 +282,7 @@ textarea:focus {
   border-radius: 18px;
   background: rgba(255, 255, 255, 0.68);
   color: var(--muted);
+  line-height: 1.6;
 }
 
 @media (max-width: 520px) {
@@ -236,7 +296,9 @@ textarea:focus {
     padding: 16px;
   }
 
-  .action-row {
+  .action-row,
+  .history-actions,
+  .view-toggle {
     grid-template-columns: 1fr;
   }
 
