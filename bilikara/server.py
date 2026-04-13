@@ -535,15 +535,7 @@ class BilikaraHandler(BaseHTTPRequestHandler):
         if not str(static_path).startswith(str(STATIC_DIR.resolve())) or not static_path.exists():
             self._write_json({"ok": False, "error": "资源不存在"}, status=HTTPStatus.NOT_FOUND)
             return
-        self._stream_file(
-            static_path,
-            content_type=self._guess_type(static_path),
-            extra_headers={
-                "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
-                "Pragma": "no-cache",
-                "Expires": "0",
-            },
-        )
+        self._stream_file(static_path, content_type=self._guess_type(static_path))
 
     def _serve_media(self, route: str) -> None:
         relative = route.removeprefix("/media/")
@@ -585,7 +577,6 @@ class BilikaraHandler(BaseHTTPRequestHandler):
         *,
         content_type: str,
         allow_ranges: bool = False,
-        extra_headers: dict[str, str] | None = None,
     ) -> None:
         file_size = file_path.stat().st_size
         range_header = self.headers.get("Range", "")
@@ -602,9 +593,6 @@ class BilikaraHandler(BaseHTTPRequestHandler):
                     self.send_header("Accept-Ranges", "bytes")
                     self.send_header("Content-Range", f"bytes {start}-{end}/{file_size}")
                     self.send_header("Content-Length", str(end - start + 1))
-                    if extra_headers:
-                        for key, value in extra_headers.items():
-                            self.send_header(key, value)
                     self.end_headers()
                     with file_path.open("rb") as handle:
                         handle.seek(start)
@@ -622,9 +610,6 @@ class BilikaraHandler(BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(file_size))
         if allow_ranges:
             self.send_header("Accept-Ranges", "bytes")
-        if extra_headers:
-            for key, value in extra_headers.items():
-                self.send_header(key, value)
         self.end_headers()
         with file_path.open("rb") as handle:
             while True:
