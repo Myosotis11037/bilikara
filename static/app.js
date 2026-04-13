@@ -23,6 +23,7 @@ const state = {
   dragTargetAfter: false,
   confirmIntent: null,
   retryActivityById: {},
+  gatchaCandidate: null,
 };
 
 const elements = {
@@ -78,6 +79,15 @@ const elements = {
   remoteQrPlaceholder: document.getElementById("remote-qr-placeholder"),
   remoteUrlLink: document.getElementById("remote-url-link"),
   remoteUrlHint: document.getElementById("remote-url-hint"),
+  gatchaButton: document.getElementById("gatcha-button"),
+  gatchaConfirmButton: document.getElementById("gatcha-confirm-button"),
+  gatchaRetryButton: document.getElementById("gatcha-retry-button"),
+  gatchaInitView: document.getElementById("gatcha-init-view"),
+  gatchaResultView: document.getElementById("gatcha-result-view"),
+  gatchaCandidateTitle: document.getElementById("gatcha-candidate-title"),
+  cookieSessdata: document.getElementById("cookie-sessdata"),
+  cookieJct: document.getElementById("cookie-jct"),
+  saveCookieButton: document.getElementById("save-cookie-button"),
 };
 
 function setFormMessage(message, isError = false) {
@@ -135,6 +145,27 @@ async function fetchState() {
   }
   state.data = payload.data;
   render();
+}
+
+async function handleGatchaDraw() {
+  setFormMessage("正在连接 B 站寻找幸运投稿...");
+  try {
+    const response = await fetch("/api/gatcha/candidate", { headers: clientHeaders() });
+    const payload = await response.json();
+    if (!response.ok || !payload.ok) {
+      throw new Error(payload.error || "获取幸运歌曲失败");
+    }
+
+    state.gatchaCandidate = payload.data;
+    elements.gatchaCandidateTitle.textContent = state.gatchaCandidate.title;
+    
+    // 切换界面
+    elements.gatchaInitView.classList.add("hidden");
+    elements.gatchaResultView.classList.remove("hidden");
+    setFormMessage("运气不错！抽中了这首。");
+  } catch (error) {
+    setFormMessage(error.message, true);
+  }
 }
 
 function disconnectClient() {
@@ -1867,6 +1898,68 @@ elements.listStage.addEventListener("wheel", (event) => {
   event.preventDefault();
   list.scrollTop = clampedScrollTop;
 }, { passive: false });
+
+elements.gatchaButton.addEventListener("click", handleGatchaDraw);
+elements.gatchaRetryButton.addEventListener("click", handleGatchaDraw);
+
+elements.gatchaConfirmButton.addEventListener("click", async () => {
+  if (!state.gatchaCandidate) return;
+
+  const url = state.gatchaCandidate.url;
+  setFormMessage("Nozomi power注入！");
+  try {
+    state.data = await submitAddRequest(url, "tail");
+    setFormMessage(`点歌成功：${state.gatchaCandidate.title}`);
+    
+
+    state.gatchaCandidate = null;
+    elements.gatchaResultView.classList.add("hidden");
+    elements.gatchaInitView.classList.remove("hidden");
+    render();
+  } catch (error) {
+    if (error.code === "duplicate_session_request") {
+      const point = anchorPointForEvent({}, elements.gatchaConfirmButton);
+      openConfirm({
+        type: "duplicate-add",
+        url,
+        position: "tail",
+        preserveInput: false,
+        message: duplicateConfirmMessage(
+          error.payload?.duplicate_item,
+          error.payload?.session_entry,
+          error.payload?.active_item,
+        ),
+        x: point.x,
+        y: point.y,
+      });
+      return;
+    }
+    setFormMessage(error.message, true);
+  }
+});
+
+elements.saveCookieButton.addEventListener("click", async () => {
+  const sessdata = elements.cookieSessdata.value.trim();
+  const jct = elements.cookieJct.value.trim();
+
+  if (!sessdata || !jct) {
+    setFormMessage("请填写完整的 SESSDATA 和 bili_jct", true);
+    return;
+  }
+
+  setFormMessage("正在更新 Cookie 配置...");
+  try {
+    const result = await apiPost("/api/config/cookie", {
+      sessdata: sessdata,
+      bili_jct: jct
+    });
+    setFormMessage("Cookie 已更新，试试运气功能现已可用。");
+    elements.cookieSessdata.value = "";
+    elements.cookieJct.value = "";
+  } catch (error) {
+    setFormMessage(error.message, true);
+  }
+});
 
 async function startPolling() {
   try {

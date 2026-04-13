@@ -106,12 +106,16 @@ FFMPEG_RUNTIME_PATH = FFMPEG_TOOLS_DIR / ("ffmpeg.exe" if os.name == "nt" else "
 FFPROBE_RUNTIME_PATH = FFMPEG_TOOLS_DIR / ("ffprobe.exe" if os.name == "nt" else "ffprobe")
 FFMPEG_BUNDLED_PATH = VENDOR_DIR / ("ffmpeg.exe" if os.name == "nt" else "ffmpeg")
 BB_DOWN_VERSION_FILE = BB_DOWN_DIR / "VERSION"
+GATCHA_UIDS = ["3145040","671767","33091201"]
+GATCHA_KEYWORDS = ["卡拉", "カラ", "投屏"]
+USER_VIDEO_API = "https://api.bilibili.com/x/space/wbi/arc/search?mid={mid}&ps=50&tid=0&pn=1&order=pubdate"
 
 HOST = _default_host()
 PORT = int(os.getenv("BILIKARA_PORT", "8080"))
 MAX_CACHE_ITEMS = max(0, int(os.getenv("BILIKARA_MAX_CACHE_ITEMS", "3")))
 # MAX_CACHE_ITEMS = min(max(0, int(os.getenv("BILIKARA_MAX_CACHE_ITEMS", "3"))), 5)  # force max=5
 COOKIE = os.getenv("BILIKARA_BILIBILI_COOKIE", "").strip()
+print(f"DEBUG: {COOKIE}")
 BB_DOWN_PATH_OVERRIDE = os.getenv("BB_DOWN_PATH", "").strip()
 FFMPEG_PATH_OVERRIDE = os.getenv("FFMPEG_PATH", "").strip()
 
