@@ -30,6 +30,8 @@ class PlaylistItem:
     owner_mid: int = 0
     owner_name: str = ""
     owner_url: str = ""
+    requester_name: str = ""
+    queue_slot_type: str = "cycle"
     cache_status: str = "pending"
     cache_progress: float = 0.0
     cache_message: str = "等待缓存"
@@ -68,6 +70,7 @@ class HistoryEntry:
     owner_mid: int = 0
     owner_name: str = ""
     owner_url: str = ""
+    requester_name: str = ""
     request_count: int = 1
 
     def serialize(self) -> dict[str, Any]:
@@ -104,6 +107,7 @@ class SessionPlayedEntry:
     owner_mid: int = 0
     owner_name: str = ""
     owner_url: str = ""
+    requester_name: str = ""
 
     def serialize(self) -> dict[str, Any]:
         return asdict(self)

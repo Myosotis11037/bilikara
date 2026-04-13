@@ -11,11 +11,13 @@ const state = {
 
 const elements = {
   currentTitle: document.getElementById("current-title"),
+  currentRequester: document.getElementById("current-requester"),
   currentMeta: document.getElementById("current-meta"),
   audioVariantBar: document.getElementById("audio-variant-bar"),
   playerControlPanel: document.getElementById("player-control-panel"),
   playerControlHint: document.getElementById("player-control-hint"),
   requestForm: document.getElementById("request-form"),
+  requesterSelect: document.getElementById("requester-select"),
   urlInput: document.getElementById("url-input"),
   formMessage: document.getElementById("form-message"),
   addNextButton: document.getElementById("add-next-button"),
@@ -45,6 +47,15 @@ function clientHeaders(extraHeaders = {}) {
   };
 }
 
+function requesterBadgeText(requesterName) {
+  const normalized = String(requesterName || "").trim();
+  return normalized ? `点歌人 ${normalized}` : "";
+}
+
+function selectedRequesterName() {
+  return String(elements.requesterSelect?.value || "").trim();
+}
+
 function setFormMessage(message, isError = false) {
   elements.formMessage.textContent = message;
   elements.formMessage.classList.toggle("error", isError);
@@ -58,7 +69,11 @@ async function apiPost(url, payload = {}) {
   });
   const data = await response.json();
   if (!response.ok || !data.ok) {
-    throw new Error(data.error || "请求失败");
+    const error = new Error(data.error || "请求失败");
+    error.status = response.status;
+    error.code = data.code || "";
+    error.payload = data;
+    throw error;
   }
   return data.data;
 }
@@ -79,6 +94,7 @@ function render() {
     return;
   }
 
+  renderRequesterSelect(data.session_users || []);
   renderCurrentItem(data.current_item, data.playback_mode);
   renderAudioVariantBar(data.current_item, data.playback_mode);
   renderPlayerControls(data.current_item, data.playback_mode);
@@ -88,9 +104,37 @@ function render() {
   syncListView();
 }
 
+function renderRequesterSelect(sessionUsers) {
+  const users = Array.isArray(sessionUsers) ? sessionUsers : [];
+  const previousValue = selectedRequesterName();
+  elements.requesterSelect.innerHTML = "";
+
+  const placeholder = document.createElement("option");
+  placeholder.value = "";
+  placeholder.textContent = users.length ? "选择点歌人" : "请先让服务端添加用户";
+  elements.requesterSelect.appendChild(placeholder);
+
+  users.forEach((userName) => {
+    const option = document.createElement("option");
+    option.value = userName;
+    option.textContent = userName;
+    elements.requesterSelect.appendChild(option);
+  });
+
+  if (previousValue && users.includes(previousValue)) {
+    elements.requesterSelect.value = previousValue;
+  } else {
+    elements.requesterSelect.value = "";
+  }
+  elements.requesterSelect.disabled = users.length === 0;
+}
+
 function renderCurrentItem(current, playbackMode) {
   if (current) {
     elements.currentTitle.textContent = current.display_title;
+    const requesterText = requesterBadgeText(current.requester_name);
+    elements.currentRequester.textContent = requesterText;
+    elements.currentRequester.classList.toggle("hidden", !requesterText);
     const modeLabel = playbackMode === "online" ? "在线播放" : "本地播放";
     const cacheText = current.cache_message || "等待缓存";
     elements.currentMeta.textContent = `${modeLabel} · ${cacheText}`;
@@ -98,6 +142,8 @@ function renderCurrentItem(current, playbackMode) {
   }
 
   elements.currentTitle.textContent = "当前还没有正在播放的歌曲";
+  elements.currentRequester.textContent = "";
+  elements.currentRequester.classList.add("hidden");
   elements.currentMeta.textContent = "点歌后会进入主队列，轮到时由服务端页面播放。";
 }
 
@@ -173,6 +219,7 @@ function renderPlayerControls(currentItem, playbackMode) {
   const isPaused = Boolean(playerStatus?.is_paused);
   const toggleButton = elements.playerControlPanel.querySelector('[data-control-action="toggle-play"]');
   elements.playerControlPanel.classList.remove("hidden");
+
   elements.playerControlPanel.querySelectorAll("button[data-control-action]").forEach((button) => {
     const isPending = button.dataset.controlAction === state.playerControlPendingAction;
     button.disabled = !canControl || Boolean(state.playerControlPendingAction);
@@ -219,7 +266,7 @@ function syncListView() {
 function renderQueue(playlist) {
   elements.queueList.innerHTML = "";
   if (!playlist.length) {
-    elements.queueList.innerHTML = '<div class="queue-empty">队列暂时是空的，可以直接点下一首歌。</div>';
+    elements.queueList.innerHTML = '<div class="queue-empty">队列暂时是空的，可以继续点下一首歌。</div>';
     return;
   }
 
@@ -231,10 +278,35 @@ function renderQueue(playlist) {
       orderNode.textContent = String(index + 1);
     }
     node.querySelector(".queue-title").textContent = item.display_title;
-    node.querySelector(".queue-note").textContent = item.cache_message || "等待缓存";
+    const noteNode = node.querySelector(".queue-note");
+    const noteText = queueNoteText(item);
+    noteNode.textContent = noteText;
+    noteNode.classList.toggle("hidden", !noteText);
+    node.querySelector(".queue-main").classList.toggle("is-compact", !noteText);
     node.querySelector(".queue-state").textContent = queueStateLabel(item);
+    const requesterNode = node.querySelector(".queue-requester");
+    const requesterText = requesterBadgeText(item.requester_name);
+    requesterNode.textContent = requesterText;
+    requesterNode.classList.toggle("hidden", !requesterText);
     elements.queueList.appendChild(node);
   });
+}
+
+function queueNoteText(item) {
+  if (!item) {
+    return "";
+  }
+  if (item.cache_status === "ready") {
+    return "";
+  }
+  const message = String(item.cache_message || "").trim();
+  if (!message) {
+    return "";
+  }
+  if (message === "已缓存" || message === "缓存已完成") {
+    return "";
+  }
+  return message;
 }
 
 function queueStateLabel(item) {
@@ -265,6 +337,10 @@ function renderHistory(history) {
   history.forEach((entry) => {
     const node = elements.historyItemTemplate.content.firstElementChild.cloneNode(true);
     node.querySelector(".history-title").textContent = entry.display_title;
+    const requesterNode = node.querySelector(".history-requester");
+    const requesterText = requesterBadgeText(entry.requester_name);
+    requesterNode.textContent = requesterText;
+    requesterNode.classList.toggle("hidden", !requesterText);
     node.querySelector(".history-time").textContent = formatHistoryTime(entry.requested_at);
     node.querySelector(".history-count").textContent = `点歌 ${entry.request_count} 次`;
     node.querySelectorAll("button").forEach((button) => {
@@ -288,17 +364,22 @@ function formatHistoryTime(timestamp) {
 
 async function submitRequest(position) {
   const url = elements.urlInput.value.trim();
+  const requesterName = selectedRequesterName();
   if (!url || state.submitting) {
     if (!url) {
       setFormMessage("请输入 bilibili 链接、BV 号或 av 号。", true);
     }
     return;
   }
+  if (!requesterName) {
+    setFormMessage("请先选择点歌人。", true);
+    return;
+  }
 
   state.submitting = true;
   setFormMessage(position === "next" ? "正在顶歌..." : "正在加入队列...");
   try {
-    state.data = await apiPost("/api/playlist/add", { url, position });
+    state.data = await apiPost("/api/playlist/add", { url, position, requester_name: requesterName });
     elements.urlInput.value = "";
     setFormMessage(position === "next" ? "已经顶歌到下一首。" : "已经加入播放队列。");
     render();
@@ -310,14 +391,19 @@ async function submitRequest(position) {
 }
 
 async function handleAddByHistory(url, position) {
+  const requesterName = selectedRequesterName();
   if (!url || state.submitting) {
+    return;
+  }
+  if (!requesterName) {
+    setFormMessage("请先选择点歌人。", true);
     return;
   }
 
   state.submitting = true;
   setFormMessage(position === "next" ? "正在从历史记录顶歌..." : "正在从历史记录加入队列...");
   try {
-    state.data = await apiPost("/api/playlist/add", { url, position });
+    state.data = await apiPost("/api/playlist/add", { url, position, requester_name: requesterName });
     setFormMessage(position === "next" ? "已从历史记录顶歌到下一首。" : "已从历史记录加入队列。");
     render();
   } catch (error) {
@@ -335,7 +421,7 @@ async function sendPlayerControl(action, deltaSeconds = 0) {
   }
 
   const message = action === "toggle-play"
-    ? "已发送播放/暂停指令。"
+    ? "已发送播放 / 暂停指令。"
     : deltaSeconds > 0
       ? "已发送快进 15 秒指令。"
       : "已发送后退 15 秒指令。";
@@ -366,6 +452,10 @@ async function sendPlayerControl(action, deltaSeconds = 0) {
   }
   state.playerControlPendingAction = "";
   renderPlayerControls(state.data?.current_item, state.data?.playback_mode);
+}
+
+function queueNoteText() {
+  return "";
 }
 
 function disconnectClient() {

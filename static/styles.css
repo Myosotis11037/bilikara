@@ -38,7 +38,8 @@ body {
 }
 
 button,
-input {
+input,
+select {
   font: inherit;
 }
 
@@ -157,6 +158,8 @@ p {
 .next-button,
 .status-chip-toggle,
 .song-actions button,
+.session-user-form button,
+.session-user-actions button,
 .history-actions button,
 .icon-button,
 .mode-button,
@@ -183,6 +186,7 @@ p {
 .toolbar-button,
 .next-button,
 .song-actions button,
+.session-user-form button,
 .history-actions button,
 .compact-form button {
   padding: 10px 14px;
@@ -588,13 +592,14 @@ h2 {
 
 .compact-form {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
+  grid-template-columns: 180px minmax(0, 1fr) auto auto;
   align-items: center;
   gap: 10px;
   margin-top: 12px;
 }
 
-input[type="text"] {
+input[type="text"],
+select {
   width: 100%;
   height: 48px;
   border-radius: 16px;
@@ -604,13 +609,20 @@ input[type="text"] {
   outline: none;
 }
 
-input[type="text"]:focus {
+input[type="text"]:focus,
+select:focus {
   border-color: rgba(208, 90, 63, 0.45);
   box-shadow: 0 0 0 4px rgba(208, 90, 63, 0.1);
 }
 
+select:disabled {
+  opacity: 0.68;
+  cursor: not-allowed;
+}
+
 .next-button,
 .compact-form button[type="submit"],
+.session-user-form button,
 .song-actions button:first-child,
 .history-actions button:first-child {
   background: var(--accent);
@@ -622,6 +634,86 @@ input[type="text"]:focus {
   color: var(--muted);
   font-size: 13px;
   grid-column: 1 / -1;
+}
+
+.session-user-form {
+  margin-top: 12px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+}
+
+.session-user-list {
+  display: grid;
+  gap: 10px;
+}
+
+.session-user-empty {
+  padding: 18px;
+}
+
+.session-user-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  padding: 12px 14px;
+  border-radius: 18px;
+  border: 1px solid rgba(91, 66, 47, 0.1);
+  background: rgba(255, 255, 255, 0.74);
+}
+
+.session-user-main {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.session-user-order {
+  width: 30px;
+  height: 30px;
+  border-radius: 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(208, 90, 63, 0.1);
+  color: var(--accent-deep);
+  font-weight: 700;
+  font-size: 13px;
+}
+
+.session-user-name {
+  min-width: 0;
+  font-size: 15px;
+  line-height: 1.25;
+}
+
+.session-user-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.session-user-actions button {
+  border: none;
+  min-height: 34px;
+  padding: 0 12px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.82);
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.session-user-actions button.danger {
+  color: var(--red);
+  background: rgba(177, 69, 69, 0.12);
+}
+
+.session-user-actions button:disabled {
+  opacity: 0.42;
+  cursor: not-allowed;
 }
 
 .remote-panel {
@@ -863,6 +955,14 @@ input[type="text"]:focus {
   line-height: 1.35;
   color: var(--accent-deep);
   width: 100%;
+}
+
+.queue-current-requester,
+.history-requester {
+  margin-top: 8px;
+  font-size: 12px;
+  line-height: 1.35;
+  color: var(--accent-deep);
 }
 
 .queue-current-next {
@@ -1127,6 +1227,7 @@ input[type="text"]:focus {
 
 .song-title {
   min-width: 0;
+  flex: 1;
   font-size: 16px;
   font-weight: 600;
   line-height: 1.32;
@@ -1136,6 +1237,21 @@ input[type="text"]:focus {
   line-clamp: 3;
   white-space: normal;
   overflow: hidden;
+}
+
+.song-requester {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 28px;
+  padding: 0 10px;
+  border-radius: 999px;
+  background: rgba(208, 90, 63, 0.1);
+  color: var(--accent-deep);
+  font-size: 12px;
+  line-height: 1;
+  white-space: nowrap;
 }
 
 .icon-button.danger {
@@ -1299,6 +1415,12 @@ input[type="text"]:focus {
     grid-template-columns: 1fr;
   }
 
+  .session-user-form,
+  .session-user-item,
+  .session-user-actions {
+    grid-template-columns: 1fr;
+  }
+
   .remote-card {
     grid-template-columns: 1fr;
   }
@@ -1363,6 +1485,11 @@ input[type="text"]:focus {
   }
 
   .song-bottom-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .song-top-row {
     flex-direction: column;
     align-items: stretch;
   }

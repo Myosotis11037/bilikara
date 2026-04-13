@@ -3,11 +3,15 @@ from __future__ import annotations
 import json
 import threading
 import time
+from collections import defaultdict
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 
 from .models import HistoryEntry, PlaylistItem, SessionPlayedEntry
+
+MAX_SESSION_USERS = 32
+MAX_SESSION_USER_NAME_LENGTH = 24
 
 
 class PlaylistStore:
@@ -26,6 +30,7 @@ class PlaylistStore:
         self.playlist: list[PlaylistItem] = []
         self.history: list[HistoryEntry] = []
         self.session_history: list[HistoryEntry] = []
+        self.session_users: list[str] = []
         self.session_started_at = time.time()
         self.session_played_file = (
             self.session_archive_dir
@@ -44,6 +49,7 @@ class PlaylistStore:
                 "current_item": self.current_item.to_dict() if self.current_item else None,
                 "history": [entry.to_dict() for entry in self.history],
                 "session_history": [entry.to_dict() for entry in self.session_history],
+                "session_users": list(self.session_users),
                 "updated_at": self.updated_at,
                 "backup": self._backup_summary_unlocked(),
             }
@@ -62,8 +68,17 @@ class PlaylistStore:
         with self.lock:
             return self._find_item_unlocked(item_id)
 
-    def add_item(self, item: PlaylistItem, position: str = "tail") -> None:
+    def add_item(
+        self,
+        item: PlaylistItem,
+        position: str = "tail",
+        *,
+        requester_name: str = "",
+    ) -> None:
         with self.lock:
+            normalized_requester = self._validate_requester_name_unlocked(requester_name)
+            item.requester_name = normalized_requester
+            item.queue_slot_type = "priority" if position == "next" else "cycle"
             self._record_session_request_unlocked(item)
             self._record_history_unlocked(item)
             if self.current_item is None:
@@ -74,7 +89,7 @@ class PlaylistStore:
             if position == "next":
                 self.playlist.insert(0, item)
             else:
-                self.playlist.append(item)
+                self._insert_cycle_item_unlocked(item)
             self._touch(persist_backup=True)
 
     def remove_item(self, item_id: str) -> bool:
@@ -111,6 +126,7 @@ class PlaylistStore:
             if index is None:
                 return False
             if direction == "up" and index > 0:
+                self.playlist[index].queue_slot_type = "manual"
                 self.playlist[index - 1], self.playlist[index] = (
                     self.playlist[index],
                     self.playlist[index - 1],
@@ -118,6 +134,7 @@ class PlaylistStore:
                 self._touch(persist_backup=True)
                 return True
             if direction == "down" and index < len(self.playlist) - 1:
+                self.playlist[index].queue_slot_type = "manual"
                 self.playlist[index + 1], self.playlist[index] = (
                     self.playlist[index],
                     self.playlist[index + 1],
@@ -132,6 +149,7 @@ class PlaylistStore:
             if index is None:
                 return False
             item = self.playlist.pop(index)
+            item.queue_slot_type = "priority"
             self.playlist.insert(0, item)
             self._touch(persist_backup=True)
             return True
@@ -145,6 +163,7 @@ class PlaylistStore:
             if bounded_index == index:
                 return True
             item = self.playlist.pop(index)
+            item.queue_slot_type = "manual"
             self.playlist.insert(bounded_index, item)
             self._touch(persist_backup=True)
             return True
@@ -197,6 +216,48 @@ class PlaylistStore:
             for key, value in changes.items():
                 setattr(item, key, value)
             self._touch(persist_backup=persist_backup)
+            return True
+
+    def add_session_user(self, name: str) -> bool:
+        with self.lock:
+            normalized = self._normalize_session_user_name(name)
+            if not normalized:
+                raise ValueError("用户名不能为空")
+            if normalized in self.session_users:
+                raise ValueError("该用户已存在")
+            if len(self.session_users) >= MAX_SESSION_USERS:
+                raise ValueError(f"最多只能添加 {MAX_SESSION_USERS} 个用户")
+            self.session_users.append(normalized)
+            self._rebuild_cycle_items_unlocked()
+            self._touch(persist_backup=True)
+            return True
+
+    def remove_session_user(self, name: str) -> bool:
+        with self.lock:
+            normalized = self._normalize_session_user_name(name)
+            if not normalized or normalized not in self.session_users:
+                return False
+            self.session_users = [entry for entry in self.session_users if entry != normalized]
+            self._rebuild_cycle_items_unlocked()
+            self._touch(persist_backup=True)
+            return True
+
+    def move_session_user_to_index(self, name: str, target_index: int) -> bool:
+        with self.lock:
+            normalized = self._normalize_session_user_name(name)
+            if not normalized:
+                return False
+            try:
+                index = self.session_users.index(normalized)
+            except ValueError:
+                return False
+            bounded_index = max(0, min(target_index, len(self.session_users) - 1))
+            if bounded_index == index:
+                return True
+            user_name = self.session_users.pop(index)
+            self.session_users.insert(bounded_index, user_name)
+            self._rebuild_cycle_items_unlocked()
+            self._touch(persist_backup=True)
             return True
 
     def restore_backup(self) -> bool:
@@ -274,7 +335,10 @@ class PlaylistStore:
                 urls.append(candidate)
 
             if self.current_item:
-                collect(self.current_item.resolved_url or self.current_item.original_url, self.current_item.owner_name)
+                collect(
+                    self.current_item.resolved_url or self.current_item.original_url,
+                    self.current_item.owner_name,
+                )
             for item in self.playlist:
                 collect(item.resolved_url or item.original_url, item.owner_name)
             for entry in self.history:
@@ -342,6 +406,81 @@ class PlaylistStore:
                 return item
         return None
 
+    def _insert_cycle_item_unlocked(self, item: PlaylistItem) -> None:
+        if not self.playlist:
+            self.playlist.append(item)
+            return
+
+        cycle_keys, requester_counts, order_index = self._requester_cycle_state_unlocked()
+        requester_name = self._normalize_session_user_name(item.requester_name)
+        if requester_name not in order_index:
+            self.playlist.append(item)
+            return
+        new_key = (requester_counts[requester_name], order_index[requester_name])
+
+        insert_index = 0
+        for index, existing in enumerate(self.playlist):
+            if existing.queue_slot_type != "cycle":
+                insert_index = index + 1
+                continue
+            existing_key = cycle_keys.get(existing.id)
+            if existing_key is None:
+                insert_index = index + 1
+                continue
+            if existing_key <= new_key:
+                insert_index = index + 1
+        self.playlist.insert(insert_index, item)
+
+    def _rebuild_cycle_items_unlocked(self) -> None:
+        cycle_positions: list[int] = []
+        sortable_items: list[tuple[tuple[int, int], int, PlaylistItem]] = []
+        cycle_keys, _, _ = self._requester_cycle_state_unlocked()
+
+        for index, item in enumerate(self.playlist):
+            if item.queue_slot_type != "cycle":
+                continue
+            key = cycle_keys.get(item.id)
+            if key is None:
+                continue
+            cycle_positions.append(index)
+            sortable_items.append((key, index, item))
+
+        if not sortable_items:
+            return
+
+        sortable_items.sort(key=lambda entry: (entry[0][0], entry[0][1], entry[1]))
+        rebuilt_playlist = list(self.playlist)
+        for target_index, (_, _, item) in zip(cycle_positions, sortable_items):
+            rebuilt_playlist[target_index] = item
+        self.playlist = rebuilt_playlist
+
+    def _requester_cycle_state_unlocked(
+        self,
+    ) -> tuple[dict[str, tuple[int, int]], defaultdict[str, int], dict[str, int]]:
+        order_index = {
+            user_name: index for index, user_name in enumerate(self.session_users)
+        }
+        requester_counts: defaultdict[str, int] = defaultdict(int)
+        cycle_keys: dict[str, tuple[int, int]] = {}
+
+        if self.current_item:
+            current_requester = self._normalize_session_user_name(self.current_item.requester_name)
+            if current_requester in order_index:
+                requester_counts[current_requester] += 1
+
+        for item in self.playlist:
+            requester_name = self._normalize_session_user_name(item.requester_name)
+            if requester_name not in order_index:
+                continue
+            if item.queue_slot_type == "cycle":
+                cycle_keys[item.id] = (
+                    requester_counts[requester_name],
+                    order_index[requester_name],
+                )
+            requester_counts[requester_name] += 1
+
+        return cycle_keys, requester_counts, order_index
+
     def _save_session(self) -> None:
         payload = {
             "playback_mode": self.playback_mode,
@@ -397,7 +536,7 @@ class PlaylistStore:
         payload.update(
             cache_status="pending",
             cache_progress=0.0,
-            cache_message="等待缓存",
+            cache_message="绛夊緟缂撳瓨",
             local_relative_path="",
             local_media_url="",
             audio_variants=[],
@@ -410,7 +549,7 @@ class PlaylistStore:
         sanitized.update(
             cache_status="pending",
             cache_progress=0.0,
-            cache_message="等待缓存",
+            cache_message="绛夊緟缂撳瓨",
             local_relative_path="",
             local_media_url="",
             audio_variants=[],
@@ -471,6 +610,7 @@ class PlaylistStore:
             owner_mid=item.owner_mid,
             owner_name=item.owner_name,
             owner_url=item.owner_url,
+            requester_name=item.requester_name,
             requested_at=now,
             request_count=1,
         )
@@ -495,6 +635,7 @@ class PlaylistStore:
             owner_mid=item.owner_mid,
             owner_name=item.owner_name,
             owner_url=item.owner_url,
+            requester_name=item.requester_name,
             requested_at=now,
             request_count=1,
         )
@@ -524,6 +665,7 @@ class PlaylistStore:
                 owner_mid=item.owner_mid,
                 owner_name=item.owner_name,
                 owner_url=item.owner_url,
+                requester_name=item.requester_name,
             )
         )
 
@@ -555,3 +697,18 @@ class PlaylistStore:
             "preview_titles": preview_titles[:3],
             "playback_mode": str(payload.get("playback_mode") or "local"),
         }
+
+    def _validate_requester_name_unlocked(self, requester_name: str) -> str:
+        if not self.session_users:
+            raise ValueError("请先在服务端添加本场 KTV 用户")
+        normalized = self._normalize_session_user_name(requester_name)
+        if not normalized:
+            raise ValueError("点歌前请先选择用户名")
+        if normalized not in self.session_users:
+            raise ValueError("所选用户名不存在，请重新选择")
+        return normalized
+
+    @staticmethod
+    def _normalize_session_user_name(name: str) -> str:
+        normalized = " ".join(str(name or "").strip().split())
+        return normalized[:MAX_SESSION_USER_NAME_LENGTH]

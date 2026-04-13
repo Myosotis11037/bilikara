@@ -39,7 +39,21 @@
         orderNode.textContent = String(index + 1);
       }
       node.querySelector(".queue-title").textContent = item.display_title;
-      node.querySelector(".queue-note").textContent = item.cache_message || "等待缓存";
+      const requesterNode = node.querySelector(".queue-requester");
+      const requesterText = typeof requesterBadgeText === "function"
+        ? requesterBadgeText(item.requester_name)
+        : String(item.requester_name || "").trim();
+      if (requesterNode) {
+        requesterNode.textContent = requesterText;
+        requesterNode.classList.toggle("hidden", !requesterText);
+      }
+      const noteNode = node.querySelector(".queue-note");
+      const noteText = typeof queueNoteText === "function"
+        ? queueNoteText(item)
+        : String(item.cache_message || "").trim();
+      noteNode.textContent = noteText;
+      noteNode.classList.toggle("hidden", !noteText);
+      node.querySelector(".queue-main").classList.toggle("is-compact", !noteText);
       node.querySelector(".queue-state").textContent = queueStateLabel(item);
       node.querySelectorAll("button[data-action]").forEach((button) => {
         button.dataset.id = item.id;

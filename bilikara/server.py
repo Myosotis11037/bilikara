@@ -85,8 +85,8 @@ class AppContext:
         payload["player_status"] = self.player_status_snapshot(payload.get("current_item"))
         return payload
 
-    def add_item(self, item, *, position: str) -> None:
-        self.store.add_item(item, position=position)
+    def add_item(self, item, *, position: str, requester_name: str) -> None:
+        self.store.add_item(item, position=position, requester_name=requester_name)
         self.cache_manager.sync_with_playlist()
 
     def advance_to_next(self) -> None:
@@ -122,6 +122,15 @@ class AppContext:
 
     def set_audio_variant(self, item_id: str, variant_id: str) -> bool:
         return self.store.set_audio_variant(item_id, variant_id)
+
+    def add_session_user(self, name: str) -> None:
+        self.store.add_session_user(name)
+
+    def remove_session_user(self, name: str) -> None:
+        self.store.remove_session_user(name)
+
+    def move_session_user_to_index(self, name: str, index: int) -> None:
+        self.store.move_session_user_to_index(name, index)
 
     def set_cache_limit(self, max_cache_items: int) -> None:
         self.cache_manager.set_max_cache_items(max_cache_items)
@@ -342,6 +351,28 @@ class BilikaraHandler(BaseHTTPRequestHandler):
                 CONTEXT.clear_playlist()
                 self._write_json({"ok": True, "data": CONTEXT.snapshot()})
                 return
+            if route == "/api/session-users/add":
+                name = str(body.get("name") or "").strip()
+                CONTEXT.add_session_user(name)
+                self._write_json({"ok": True, "data": CONTEXT.snapshot()})
+                return
+            if route == "/api/session-users/remove":
+                name = str(body.get("name") or "").strip()
+                if not name:
+                    raise ValueError("missing name")
+                CONTEXT.remove_session_user(name)
+                self._write_json({"ok": True, "data": CONTEXT.snapshot()})
+                return
+            if route == "/api/session-users/reorder":
+                name = str(body.get("name") or "").strip()
+                index = body.get("index")
+                if not name:
+                    raise ValueError("missing name")
+                if not isinstance(index, int):
+                    raise ValueError("index must be an integer")
+                CONTEXT.move_session_user_to_index(name, index)
+                self._write_json({"ok": True, "data": CONTEXT.snapshot()})
+                return
             if route == "/api/playlist/move":
                 self._require_id(body)
                 direction = str(body.get("direction") or "")
@@ -475,13 +506,14 @@ class BilikaraHandler(BaseHTTPRequestHandler):
     def _handle_add(self, body: dict) -> None:
         url = str(body.get("url") or "").strip()
         position = str(body.get("position") or "tail")
+        requester_name = str(body.get("requester_name") or "").strip()
         allow_repeat = bool(body.get("allow_repeat"))
         item = fetch_video_item(url)
         existing_session_entry = CONTEXT.store.session_request_for_item(item)
         active_duplicate = CONTEXT.store.active_duplicate_for_item(item)
         if (existing_session_entry or active_duplicate) and not allow_repeat:
             raise DuplicateSessionRequestError(item, existing_session_entry, active_duplicate)
-        CONTEXT.add_item(item, position=position)
+        CONTEXT.add_item(item, position=position, requester_name=requester_name)
         self._write_json({"ok": True, "data": CONTEXT.snapshot()})
 
     def _serve_static(self, route: str) -> None:
