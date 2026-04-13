@@ -275,6 +275,7 @@ class PlaylistStore:
                         for entry in history_payload
                         if isinstance(entry, dict)
                     ]
+                self.session_users = self._load_session_users_from_payload(payload)
                 return False
             self.playback_mode = str(payload.get("playback_mode") or "local")
             self.current_item = (
@@ -291,6 +292,8 @@ class PlaylistStore:
                 for entry in payload.get("history") or []
                 if isinstance(entry, dict)
             ]
+            self.session_users = self._load_session_users_from_payload(payload)
+            self._rebuild_cycle_items_unlocked()
             self._touch(persist_backup=False)
             return True
 
@@ -457,16 +460,12 @@ class PlaylistStore:
     def _requester_cycle_state_unlocked(
         self,
     ) -> tuple[dict[str, tuple[int, int]], defaultdict[str, int], dict[str, int]]:
+        ordered_users = self._rotated_cycle_users_unlocked()
         order_index = {
-            user_name: index for index, user_name in enumerate(self.session_users)
+            user_name: index for index, user_name in enumerate(ordered_users)
         }
         requester_counts: defaultdict[str, int] = defaultdict(int)
         cycle_keys: dict[str, tuple[int, int]] = {}
-
-        if self.current_item:
-            current_requester = self._normalize_session_user_name(self.current_item.requester_name)
-            if current_requester in order_index:
-                requester_counts[current_requester] += 1
 
         for item in self.playlist:
             requester_name = self._normalize_session_user_name(item.requester_name)
@@ -481,12 +480,25 @@ class PlaylistStore:
 
         return cycle_keys, requester_counts, order_index
 
+    def _rotated_cycle_users_unlocked(self) -> list[str]:
+        if not self.session_users:
+            return []
+        current_requester = self._normalize_session_user_name(
+            self.current_item.requester_name if self.current_item else ""
+        )
+        if current_requester not in self.session_users:
+            return list(self.session_users)
+        current_index = self.session_users.index(current_requester)
+        start_index = (current_index + 1) % len(self.session_users)
+        return self.session_users[start_index:] + self.session_users[:start_index]
+
     def _save_session(self) -> None:
         payload = {
             "playback_mode": self.playback_mode,
             "current_item": self.current_item.serialize() if self.current_item else None,
             "playlist": [item.serialize() for item in self.playlist],
             "history": [entry.serialize() for entry in self.history],
+            "session_users": list(self.session_users),
             "updated_at": self.updated_at,
         }
         self.state_file.write_text(
@@ -518,6 +530,7 @@ class PlaylistStore:
             ),
             "playlist": [self._backup_item_payload(item) for item in self.playlist],
             "history": [entry.serialize() for entry in self.history],
+            "session_users": list(self.session_users),
             "updated_at": self.updated_at,
         }
         self.backup_file.write_text(
@@ -590,6 +603,7 @@ class PlaylistStore:
                 for entry in history_payload
                 if isinstance(entry, dict)
             ]
+            self.session_users = self._load_session_users_from_payload(payload)
 
     @staticmethod
     def _history_key(item: PlaylistItem) -> str:
@@ -712,3 +726,14 @@ class PlaylistStore:
     def _normalize_session_user_name(name: str) -> str:
         normalized = " ".join(str(name or "").strip().split())
         return normalized[:MAX_SESSION_USER_NAME_LENGTH]
+
+    def _load_session_users_from_payload(self, payload: dict[str, Any]) -> list[str]:
+        loaded_users: list[str] = []
+        for raw_name in payload.get("session_users") or []:
+            normalized = self._normalize_session_user_name(str(raw_name or ""))
+            if not normalized or normalized in loaded_users:
+                continue
+            if len(loaded_users) >= MAX_SESSION_USERS:
+                break
+            loaded_users.append(normalized)
+        return loaded_users

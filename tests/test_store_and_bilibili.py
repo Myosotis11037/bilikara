@@ -139,13 +139,14 @@ class PlaylistStoreTest(unittest.TestCase):
 
     def test_session_history_does_not_restore_from_state_file(self):
         self.add_item("a", requester_name="A", song_key="song-a")
+        self.store.move_session_user_to_index("C", 1)
         restored_store = PlaylistStore(
             state_file=self.state_file,
             backup_file=self.backup_file,
             session_archive_dir=self.session_archive_dir,
         )
         self.assertEqual(restored_store.session_history, [])
-        restored_store.add_session_user("A")
+        self.assertEqual(restored_store.session_users[:4], ["A", "C", "B", "D"])
         self.assertIsNone(restored_store.session_request_for_item(self.make_item("z", song_key="song-a")))
 
     def test_session_played_archive_tracks_items_that_become_current(self):
@@ -227,6 +228,7 @@ class PlaylistStoreTest(unittest.TestCase):
         item.cache_message = "cached"
         item.local_relative_path = "a/video.mp4"
         item.local_media_url = "/media/a/video.mp4"
+        self.store.move_session_user_to_index("D", 1)
         self.store.add_item(item, requester_name="A")
         self.store.set_mode("local")
 
@@ -246,6 +248,7 @@ class PlaylistStoreTest(unittest.TestCase):
         self.assertEqual(restored_item.local_relative_path, "")
         self.assertEqual(restored_item.local_media_url, "")
         self.assertEqual(restored_item.requester_name, "A")
+        self.assertEqual(restored_store.session_users[:4], ["A", "D", "B", "C"])
 
     def test_discard_backup(self):
         self.add_item("a", requester_name="A")
@@ -280,6 +283,26 @@ class PlaylistStoreTest(unittest.TestCase):
         self.store.move_session_user_to_index("C", 1)
         self.assertEqual(self.store.session_users[:3], ["A", "C", "B"])
         self.assertEqual([item.id for item in self.store.playlist], ["c1", "b1", "a2"])
+
+    def test_current_item_does_not_consume_waiting_queue_turn(self):
+        self.store = PlaylistStore(
+            state_file=self.state_file.parent / "current-state.json",
+            backup_file=self.state_file.parent / "current-backup.json",
+            session_archive_dir=self.session_archive_dir,
+        )
+        for user_name in ["凛夜", "kevin", "VZRXS"]:
+            self.store.add_session_user(user_name)
+
+        current = self.make_item("current")
+        self.store.add_item(current, requester_name="VZRXS")
+        self.store.add_item(self.make_item("a1"), requester_name="凛夜")
+        self.store.add_item(self.make_item("b1"), requester_name="kevin")
+        self.store.add_item(self.make_item("c1"), requester_name="VZRXS")
+
+        self.assertEqual(
+            [(item.id, item.requester_name) for item in self.store.playlist],
+            [("a1", "凛夜"), ("b1", "kevin"), ("c1", "VZRXS")],
+        )
 
 
 class BilibiliParserTest(unittest.TestCase):
