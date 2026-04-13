@@ -1,5 +1,6 @@
 const pollIntervalMs = 1000;
 const bannerAutoHideMs = 5000;
+const stalledRetrySeconds = 5;
 
 const state = {
   clientId: createClientId(),
@@ -21,6 +22,7 @@ const state = {
   dragTargetId: "",
   dragTargetAfter: false,
   confirmIntent: null,
+  retryActivityById: {},
 };
 
 const elements = {
@@ -58,6 +60,7 @@ const elements = {
   queueCurrentTag: document.getElementById("queue-current-tag"),
   queueCurrentTitle: document.getElementById("queue-current-title"),
   queueCurrentRequester: document.getElementById("queue-current-requester"),
+  queueCurrentRetry: document.getElementById("queue-current-retry"),
   listStage: document.getElementById("list-stage"),
   modeSwitch: document.getElementById("mode-switch"),
   nextButton: document.getElementById("next-button"),
@@ -391,6 +394,8 @@ function renderQueueCurrent(currentItem) {
     elements.queueCurrent.dataset.state = "idle";
     elements.queueCurrentTag.textContent = "播放中";
     elements.queueCurrentTitle.textContent = "还没有歌曲";
+    elements.queueCurrentRetry.classList.add("hidden");
+    elements.queueCurrentRetry.removeAttribute("data-id");
     return;
   }
 
@@ -402,6 +407,7 @@ function renderQueueCurrent(currentItem) {
   const requesterText = requesterBadgeText(currentItem.requester_name);
   elements.queueCurrentRequester.textContent = requesterText;
   elements.queueCurrentRequester.classList.toggle("hidden", !requesterText);
+  syncRetryButton(elements.queueCurrentRetry, currentItem);
 }
 
 function currentStatusForItem(item) {
@@ -431,13 +437,57 @@ function audioVariantsForItem(item) {
   return item.audio_variants.filter((variant) => variant && variant.media_url);
 }
 
+function variantIdForLabel(label, index) {
+  const normalized = String(label || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+  return normalized || `track_${index + 1}`;
+}
+
+function partOptionsForItem(item) {
+  const cachedVariants = audioVariantsForItem(item);
+  if (cachedVariants.length) {
+    return cachedVariants;
+  }
+  if (!item || !Array.isArray(item.selected_parts) || item.selected_parts.length <= 1) {
+    return [];
+  }
+  return item.selected_parts
+    .map((label, index) => {
+      const normalizedLabel = String(label || "").trim();
+      if (!normalizedLabel) {
+        return null;
+      }
+      return {
+        id: variantIdForLabel(normalizedLabel, index),
+        label: normalizedLabel,
+        media_url: "",
+      };
+    })
+    .filter(Boolean);
+}
+
 function selectedAudioVariantForItem(item) {
-  const variants = audioVariantsForItem(item);
+  const variants = partOptionsForItem(item);
   if (!variants.length) {
     return null;
   }
   const selectedId = String(item.selected_audio_variant_id || "").trim();
-  return variants.find((variant) => variant.id === selectedId) || variants[0];
+  if (selectedId) {
+    const selected = variants.find((variant) => variant.id === selectedId);
+    if (selected) {
+      return selected;
+    }
+  }
+  if (item && Array.isArray(item.selected_pages) && Array.isArray(item.selected_parts)) {
+    const currentPage = Number(item.page || 0);
+    const pageIndex = item.selected_pages.findIndex((page) => Number(page) === currentPage);
+    if (pageIndex >= 0 && pageIndex < variants.length) {
+      return variants[pageIndex];
+    }
+  }
+  return variants[0];
 }
 
 function selectedMediaUrlForItem(item) {
@@ -452,7 +502,7 @@ function renderAudioVariantBar(currentItem, playbackMode) {
     return;
   }
 
-  const variants = audioVariantsForItem(currentItem);
+  const variants = partOptionsForItem(currentItem);
   if (variants.length <= 1) {
     elements.audioVariantBar.innerHTML = "";
     elements.audioVariantBar.classList.add("hidden");
@@ -694,6 +744,7 @@ function renderPlaylist(playlist, currentItem, cachePolicy) {
     const indexLabel = node.querySelector(".song-index-label");
     const sizeLabel = node.querySelector(".song-size-label");
     const readyIndicator = node.querySelector(".song-badge-check");
+    const retryButton = node.querySelector(".song-retry-button");
     const note = node.querySelector(".song-note");
     const titleNode = node.querySelector(".song-title");
     const requesterNode = node.querySelector(".song-requester");
@@ -712,6 +763,7 @@ function renderPlaylist(playlist, currentItem, cachePolicy) {
     const sizeText = cacheSizeLabelForItem(item);
     sizeLabel.textContent = sizeText;
     sizeLabel.classList.toggle("hidden", !sizeText);
+    syncRetryButton(retryButton, item);
 
     titleNode.textContent = item.display_title;
     const ownerTooltip = ownerTooltipForEntry(item);
@@ -747,6 +799,75 @@ function badgeStateForItem(item, index, currentItem, cachePolicy) {
     return "active";
   }
   return "idle";
+}
+
+function shouldShowRetryButton(item) {
+  if (!item) {
+    return false;
+  }
+  const itemId = String(item.id || "");
+  if (!itemId) {
+    return false;
+  }
+  if (item.local_media_url || item.cache_status === "ready") {
+    delete state.retryActivityById[itemId];
+    return false;
+  }
+  if (item.cache_status === "failed") {
+    delete state.retryActivityById[itemId];
+    return true;
+  }
+  if (item.cache_status !== "downloading") {
+    delete state.retryActivityById[itemId];
+    return false;
+  }
+  const now = Date.now() / 1000;
+  const lastActivity = Number(item.cache_activity_at || 0);
+  const cacheSizeBytes = Number(item.cache_size_bytes || 0);
+  const cacheProgress = Number(item.cache_progress || 0);
+  const cacheMessage = String(item.cache_message || "");
+  const previous = state.retryActivityById[itemId];
+
+  const hasFreshActivity = !previous
+    || lastActivity > Number(previous.lastActivity || 0)
+    || cacheSizeBytes > Number(previous.cacheSizeBytes || 0)
+    || cacheProgress > Number(previous.cacheProgress || 0)
+    || cacheMessage !== String(previous.cacheMessage || "");
+
+  const observedAt = hasFreshActivity
+    ? now
+    : Number(previous?.observedAt || 0);
+
+  state.retryActivityById[itemId] = {
+    observedAt,
+    lastActivity,
+    cacheSizeBytes,
+    cacheProgress,
+    cacheMessage,
+  };
+
+  if (observedAt <= 0) {
+    return false;
+  }
+  return now - observedAt >= stalledRetrySeconds;
+}
+
+function syncRetryButton(button, item) {
+  if (!button) {
+    return;
+  }
+  const visible = shouldShowRetryButton(item);
+  button.classList.toggle("hidden", !visible);
+  if (!visible) {
+    button.removeAttribute("data-id");
+    button.removeAttribute("title");
+    button.removeAttribute("aria-label");
+    return;
+  }
+  const tooltip = "点击重新下载";
+  button.dataset.id = item.id;
+  button.title = tooltip;
+  button.setAttribute("aria-label", tooltip);
 }
 
 function renderHistory(history) {
@@ -1339,6 +1460,7 @@ async function handlePlaylistAction(button) {
     remove: ["/api/playlist/remove", { item_id: itemId }],
     "move-next": ["/api/playlist/move-next", { item_id: itemId }],
     "play-now": ["/api/playlist/play-now", { item_id: itemId }],
+    "retry-cache": ["/api/cache/retry", { item_id: itemId }],
   };
 
   const target = actionMap[action];
@@ -1446,6 +1568,20 @@ elements.historyToggleButton.addEventListener("click", () => {
 elements.nextButton.addEventListener("click", async () => {
   try {
     state.data = await apiPost("/api/player/next");
+    render();
+  } catch (error) {
+    setFormMessage(error.message, true);
+  }
+});
+
+elements.queueCurrentRetry.addEventListener("click", async () => {
+  const itemId = elements.queueCurrentRetry.dataset.id;
+  if (!itemId) {
+    return;
+  }
+  try {
+    state.data = await apiPost("/api/cache/retry", { item_id: itemId });
+    setFormMessage("已重新开始缓存。");
     render();
   } catch (error) {
     setFormMessage(error.message, true);
