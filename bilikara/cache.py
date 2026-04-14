@@ -244,7 +244,8 @@ class CacheManager:
             item_id,
             cache_status="pending",
             cache_progress=0.0,
-            cache_message="准备重新下载",            local_relative_path="",
+            cache_message="准备重新下载",
+            local_relative_path="",
             local_media_url="",
             audio_variants=[],
             selected_audio_variant_id="",
@@ -1037,7 +1038,7 @@ class CacheManager:
             raise DownloadCommandError(last_message)
         if not output_file.exists():
             raise DownloadCommandError("FFmpeg 混流完成，但未生成输出文件")
-        
+
         self.store.update_item(
             item_id,
             cache_progress=99.0,
@@ -1187,6 +1188,8 @@ class CacheManager:
     def _display_stage_message(stage_label: str, line: str, progress: float | None) -> str:
         if progress is not None:
             return f"{stage_label} {round(progress)}%"
+        if line:
+            return f"{stage_label}: {line}"
         return stage_label
 
     def _ensure_bbdown(self, force_refresh: bool = False) -> Path:
@@ -1285,7 +1288,7 @@ class CacheManager:
                 tf.extractall(output_dir)
         else:
             raise RuntimeError(f"不支持的 BBDown 压缩包格式: {archive_path.name}")
-        
+
     def _local_binary_path(self) -> Path:
         return BB_DOWN_DIR / ("BBDown.exe" if os.name == "nt" else "BBDown")
 
@@ -1556,7 +1559,7 @@ class CacheManager:
                 selected_audio_variant_id=item.selected_audio_variant_id,
                 cache_status="ready",
                 cache_progress=100.0,
-                cache_message="缓存完成",
+                cache_message="缓存已完成",
                 persist_backup=False,
             )
             return
