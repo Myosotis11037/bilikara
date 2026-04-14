@@ -11,6 +11,7 @@ const state = {
   audioVariantSwitchInFlight: false,
   audioVariantSwitchUnlockAt: 0,
   audioVariantSwitchTimer: null,
+  gatchaCandidate: null,
 };
 
 const elements = {
@@ -30,8 +31,18 @@ const elements = {
   requesterSelect: document.getElementById("requester-select"),
   urlInput: document.getElementById("url-input"),
   formMessage: document.getElementById("form-message"),
+  searchForm: document.getElementById("search-form"),
+  searchQuery: document.getElementById("search-query"),
+  searchButton: document.getElementById("search-button"),
+  searchResults: document.getElementById("search-results"),
   addNextButton: document.getElementById("add-next-button"),
   refreshButton: document.getElementById("refresh-button"),
+  gatchaButton: document.getElementById("gatcha-button"),
+  gatchaConfirmButton: document.getElementById("gatcha-confirm-button"),
+  gatchaRetryButton: document.getElementById("gatcha-retry-button"),
+  gatchaInitView: document.getElementById("gatcha-init-view"),
+  gatchaResultView: document.getElementById("gatcha-result-view"),
+  gatchaCandidateTitle: document.getElementById("gatcha-candidate-title"),
   listTag: document.getElementById("list-tag"),
   listTitle: document.getElementById("list-title"),
   listCount: document.getElementById("list-count"),
@@ -98,6 +109,80 @@ async function fetchState() {
   render();
 }
 
+async function searchGatchaCache(query) {
+  const normalizedQuery = String(query || "").trim();
+  const response = await fetch(`/api/gatcha/search?q=${encodeURIComponent(normalizedQuery)}`, {
+    headers: clientHeaders(),
+  });
+  const payload = await response.json();
+  if (!response.ok || !payload.ok) {
+    throw new Error(payload.error || "Search failed");
+  }
+  return Array.isArray(payload.data?.items) ? payload.data.items : [];
+}
+
+function hideSearchResults() {
+  elements.searchResults.innerHTML = "";
+  elements.searchResults.classList.add("hidden");
+}
+
+function renderSearchResults(items) {
+  elements.searchResults.innerHTML = "";
+  elements.searchResults.classList.remove("hidden");
+
+  if (!items.length) {
+    const empty = document.createElement("div");
+    empty.className = "search-empty";
+    empty.textContent = "No cached matches found.";
+    elements.searchResults.appendChild(empty);
+    return;
+  }
+
+  items.forEach((item) => {
+    const row = document.createElement("div");
+    row.className = "search-result-item";
+
+    const meta = document.createElement("div");
+
+    const title = document.createElement("div");
+    title.className = "search-result-title";
+    title.textContent = String(item.title || "");
+
+    const url = document.createElement("div");
+    url.className = "search-result-url";
+    url.textContent = String(item.bvid || "");
+
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "primary-button";
+    button.dataset.url = String(item.url || "");
+    button.textContent = "Add";
+
+    meta.append(title, url);
+    row.append(meta, button);
+    elements.searchResults.appendChild(row);
+  });
+}
+
+async function handleGatchaDraw() {
+  setFormMessage("Loading a random cached gatcha entry...");
+  try {
+    const response = await fetch("/api/gatcha/candidate", { headers: clientHeaders() });
+    const payload = await response.json();
+    if (!response.ok || !payload.ok) {
+      throw new Error(payload.error || "Gatcha failed");
+    }
+
+    state.gatchaCandidate = payload.data;
+    elements.gatchaCandidateTitle.textContent = state.gatchaCandidate.title;
+    elements.gatchaInitView.classList.add("hidden");
+    elements.gatchaResultView.classList.remove("hidden");
+    setFormMessage("Gatcha result ready.");
+  } catch (error) {
+    setFormMessage(error.message, true);
+  }
+}
+
 function render() {
   const data = state.data;
   if (!data) {
@@ -135,6 +220,8 @@ function renderRequesterSelect(sessionUsers) {
 
   if (previousValue && users.includes(previousValue)) {
     elements.requesterSelect.value = previousValue;
+  } else if (users.length) {
+    elements.requesterSelect.value = users[0];
   } else {
     elements.requesterSelect.value = "";
   }
@@ -521,6 +608,34 @@ async function handleAddByHistory(url, position) {
   }
 }
 
+async function addByUrl(url, position = "tail") {
+  const requesterName = selectedRequesterName();
+  if (!url || state.submitting) {
+    return;
+  }
+  if (!requesterName) {
+    setFormMessage("Please select a requester first.", true);
+    return;
+  }
+
+  state.submitting = true;
+  setFormMessage("Adding selected song...");
+  try {
+    state.data = await apiPost("/api/playlist/add", { url, position, requester_name: requesterName });
+    hideSearchResults();
+    elements.searchQuery.value = "";
+    state.gatchaCandidate = null;
+    elements.gatchaResultView.classList.add("hidden");
+    elements.gatchaInitView.classList.remove("hidden");
+    setFormMessage("Song added.");
+    render();
+  } catch (error) {
+    setFormMessage(error.message, true);
+  } finally {
+    state.submitting = false;
+  }
+}
+
 async function sendPlayerControl(action, deltaSeconds = 0) {
   const currentItem = state.data?.current_item;
   const playbackMode = state.data?.playback_mode;
@@ -589,6 +704,37 @@ elements.requestForm.addEventListener("submit", async (event) => {
   await submitRequest("tail");
 });
 
+elements.searchForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const query = String(elements.searchQuery.value || "").trim();
+  if (!query) {
+    hideSearchResults();
+    setFormMessage("Please enter a search keyword.", true);
+    return;
+  }
+
+  elements.searchButton.disabled = true;
+  setFormMessage("Searching local cache...");
+  try {
+    const items = await searchGatchaCache(query);
+    renderSearchResults(items);
+    setFormMessage(items.length ? `Found ${items.length} cached result(s).` : "No cached matches found.");
+  } catch (error) {
+    hideSearchResults();
+    setFormMessage(error.message, true);
+  } finally {
+    elements.searchButton.disabled = false;
+  }
+});
+
+elements.searchResults.addEventListener("click", async (event) => {
+  const button = event.target.closest("button[data-url]");
+  if (!button) {
+    return;
+  }
+  await addByUrl(String(button.dataset.url || ""), "tail");
+});
+
 elements.addNextButton.addEventListener("click", async () => {
   await submitRequest("next");
 });
@@ -639,6 +785,16 @@ elements.remoteVolumeMuteButton?.addEventListener("click", async () => {
     volumePercent: currentRemoteVolumePercent(state.data?.player_settings),
     isMuted: !currentRemoteMuted(state.data?.player_settings),
   });
+});
+
+elements.gatchaButton.addEventListener("click", handleGatchaDraw);
+elements.gatchaRetryButton.addEventListener("click", handleGatchaDraw);
+
+elements.gatchaConfirmButton.addEventListener("click", async () => {
+  if (!state.gatchaCandidate?.url) {
+    return;
+  }
+  await addByUrl(String(state.gatchaCandidate.url), "tail");
 });
 
 elements.audioVariantBar.addEventListener("click", async (event) => {
