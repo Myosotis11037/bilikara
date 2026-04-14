@@ -738,7 +738,7 @@ class PlaylistStore:
             return self.session_users[0]
             raise ValueError("点歌前请先选择用户名")
         if normalized not in self.session_users:
-            raise ValueError("Selected requester is not in the current session user list")
+            raise ValueError("所选用户名不存在，请重新选择")
         return normalized
 
     @staticmethod

@@ -925,7 +925,7 @@ class CacheManager:
                 self.store.update_item(item_id, persist_backup=False, **changes)
                 if self.stop_event.is_set():
                     self._terminate_process(process)
-                    raise CacheCancelledError("鬯ｯ・ｩ陝ｶ蟷｢・ｽ・ｸ繝ｻ・ｷ繝ｻ繧托ｽｽ・ｧ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｭ鬮｣雋ｻ・ｽ・ｨ髫ｲ蟷｢・ｽ・ｶ郢晢ｽｻ繝ｻ・ｽ郢晢ｽｻ繝ｻ・ｷ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｲ鬯ｮ・ｯ陷ｿ・･繝ｻ・ｸ繝ｻ・ｶ驛｢・ｩ繝ｻ・ｧ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｭ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・｢")
+                    raise CacheCancelledError("缓存已停止")
                 if not self._should_cache(item_id):
                     self._terminate_process(process)
                     raise CacheCancelledError(self._outside_window_message())
@@ -1173,15 +1173,15 @@ class CacheManager:
     def _cache_start_message(item) -> str:
         page_count = len(item.selected_pages or [])
         if page_count > 1:
-            return f"Preparing cache for {page_count} media tracks"
-        return "Preparing cache"
+            return f"正在缓存 1 路视频轨 + {page_count} 路音轨"
+        return "正在缓存视频"
 
     @staticmethod
     def _ready_message(item) -> str:
         page_count = len(item.selected_pages or [])
         if page_count > 1:
-            return f"Cache ready with {page_count} audio tracks"
-        return "Cache ready"
+            return f"缓存完成，共 {page_count} 条音轨"
+        return "缓存完成"
 
     @staticmethod
     def _display_stage_message(stage_label: str, line: str, progress: float | None) -> str:
@@ -1262,7 +1262,7 @@ class CacheManager:
             token = "win-x64"
         else:
             raise RuntimeError(f"当前平台暂未适配 BBDown 自动下载: {system}/{machine}")
-        
+
         assets = release.get("assets") or []
         for asset in assets:
             name = str(asset.get("name") or "").lower()
@@ -1351,8 +1351,8 @@ class CacheManager:
 
     @staticmethod
     def _display_message(line: str, progress: float | None) -> str:
-        if progress is not None:
-            return f"Caching {round(progress)}%"
+        if progress is None:
+            return line
         return f"缓存中 {round(progress)}%"
 
     @staticmethod
@@ -1399,7 +1399,7 @@ class CacheManager:
                     self._sync_runtime_tool(source_ffprobe, runtime_ffprobe, force_refresh=force_refresh)
             elif not runtime_ffmpeg.exists():
                 raise RuntimeError("未找到可用的 ffmpeg，可重新打包或设置 FFMPEG_PATH")
-            
+
             version = self._read_ffmpeg_version(runtime_ffmpeg)
             if not version:
                 raise RuntimeError(f"FFmpeg 不可执行: {runtime_ffmpeg}")
@@ -1645,13 +1645,13 @@ class CacheManager:
 
     def _outside_window_message(self) -> str:
         if self.max_cache_items <= 0:
-            return "Caching is disabled because the cache limit is set to 0"
-        return f"Outside active cache window (limit: {self.max_cache_items})"
+            return "已禁用自动缓存"
+        return f"仅自动缓存前 {self.max_cache_items} 首，已释放本地缓存"
 
     def _waiting_message(self) -> str:
         if self.max_cache_items <= 0:
-            return "Caching is disabled because the cache limit is set to 0"
-        return "Waiting in cache queue"
+            return "已禁用自动缓存"
+        return "等待缓存"
 
     def _prewarm_binary_worker(self) -> None:
         try:
@@ -1664,6 +1664,7 @@ class CacheManager:
             with self.lock:
                 self.ffmpeg_state = "failed"
                 self.ffmpeg_message = f"FFmpeg 准备失败: {exc}"
+
         try:
             with self.lock:
                 if self.binary_state == "idle":

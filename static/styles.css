@@ -1673,7 +1673,7 @@ select:disabled {
   }
 }
 
-@media (max-width: 1024px) {
+@media (max-width: 1120px) {
   .layout {
     grid-template-columns: 1fr;
   }
