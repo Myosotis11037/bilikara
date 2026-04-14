@@ -67,11 +67,11 @@ class CacheManager:
         self.lock = threading.RLock()
         self.binary_state = "idle"
         self.binary_version = ""
-        self.binary_message = "鬯ｯ・ｩ陋ｹ繝ｻ・ｽ・ｽ繝ｻ・ｲ鬮ｴ螟ｧ・｣・ｼ鬩墓㈱繝ｻ繝ｻ・ｽ郢晢ｽｻ繝ｻ・ｾ鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｻ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｻ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｻ鬯ｮ・ｯ繝ｻ・ｷ髣費ｽｨ陞滂ｽｲ繝ｻ・ｽ繝ｻ・ｽ郢晢ｽｻ繝ｻ・｡"
+        self.binary_message = "等待任务"
         self.binary_prepare_lock = threading.Lock()
         self.ffmpeg_state = "idle"
         self.ffmpeg_version = ""
-        self.ffmpeg_message = "鬯ｯ・ｩ陋ｹ繝ｻ・ｽ・ｽ繝ｻ・ｲ鬮ｴ螟ｧ・｣・ｼ鬩墓㈱繝ｻ繝ｻ・ｽ郢晢ｽｻ繝ｻ・ｾ鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｻ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｻ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｻ鬯ｮ・ｯ繝ｻ・ｷ髣費ｽｨ陞滂ｽｲ繝ｻ・ｽ繝ｻ・ｽ郢晢ｽｻ繝ｻ・｡"
+        self.ffmpeg_message = "等待任务"
         self.ffmpeg_prepare_lock = threading.Lock()
         self.active_process: subprocess.Popen[str] | None = None
         self.active_item_id: str | None = None
@@ -321,7 +321,7 @@ class CacheManager:
             self.store.update_item(
                 item_id,
                 cache_status="failed",
-                cache_message=f"BBDown 鬯ｮ・｣陋ｹ繝ｻ・ｽ・ｽ繝ｻ・ｳ鬮ｫ・ｶ隴幢ｽｱ陞ｳ・ｦ郢晢ｽｻ繝ｻ・ｺ驛｢譎｢・ｽ・ｻ繝ｻ縺､ﾂ髯具ｽｹ郢晢ｽｻ繝ｻ・ｽ繝ｻ・ｽ郢晢ｽｻ繝ｻ・ｨ: {exc}",
+                cache_message=f"BBDown 不可用: {exc}",
                 persist_backup=False,
             )
             return
@@ -333,7 +333,7 @@ class CacheManager:
             self.store.update_item(
                 item_id,
                 cache_status="failed",
-                cache_message=f"BBDown 不可用: {exc}",
+                cache_message=f"FFmpeg 不可用: {exc}",
                 persist_backup=False,
             )
             return
@@ -373,8 +373,8 @@ class CacheManager:
         self._append_log_line(log_path, f"[{self._log_timestamp()}] command: {json.dumps(command, ensure_ascii=False)}")
 
         cancelled = False
-        cancel_message = "鬯ｯ・ｩ陝ｶ蟷｢・ｽ・ｸ繝ｻ・ｷ繝ｻ繧托ｽｽ・ｧ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｭ鬮｣雋ｻ・ｽ・ｨ髫ｲ蟷｢・ｽ・ｶ郢晢ｽｻ繝ｻ・ｽ郢晢ｽｻ繝ｻ・ｷ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｲ鬯ｮ・ｯ陷ｿ・･繝ｻ・ｸ繝ｻ・ｶ驛｢・ｩ繝ｻ・ｧ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｭ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・｢"
-        last_message = "鬯ｯ・ｩ陝ｶ蟷｢・ｽ・ｸ繝ｻ・ｷ繝ｻ繧托ｽｽ・ｧ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｭ鬮ｯ蛹ｺ・ｺ蛟･繝ｻ郢晢ｽｻ繝ｻ・ｽ郢晢ｽｻ繝ｻ・ｸ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｭ"
+        cancel_message = "缓存已停止"
+        last_message = "缓存中"
         process = subprocess.Popen(
             command,
             stdout=subprocess.PIPE,
@@ -405,7 +405,7 @@ class CacheManager:
                 self.store.update_item(item_id, persist_backup=False, **changes)
                 if self.stop_event.is_set():
                     cancelled = True
-                    cancel_message = "鬯ｯ・ｩ陝ｶ蟷｢・ｽ・ｸ繝ｻ・ｷ繝ｻ繧托ｽｽ・ｧ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｭ鬮｣雋ｻ・ｽ・ｨ髫ｲ蟷｢・ｽ・ｶ郢晢ｽｻ繝ｻ・ｽ郢晢ｽｻ繝ｻ・ｷ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｲ鬯ｮ・ｯ陷ｿ・･繝ｻ・ｸ繝ｻ・ｶ驛｢・ｩ繝ｻ・ｧ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｭ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・｢"
+                    cancel_message = "缓存已停止"
                     self._terminate_process(process)
                     break
                 if not self._should_cache(item_id):
@@ -1019,7 +1019,7 @@ class CacheManager:
                 )
                 if self.stop_event.is_set():
                     self._terminate_process(process)
-                    raise CacheCancelledError("鬯ｯ・ｩ陝ｶ蟷｢・ｽ・ｸ繝ｻ・ｷ繝ｻ繧托ｽｽ・ｧ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｭ鬮｣雋ｻ・ｽ・ｨ髫ｲ蟷｢・ｽ・ｶ郢晢ｽｻ繝ｻ・ｽ郢晢ｽｻ繝ｻ・ｷ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｲ鬯ｮ・ｯ陷ｿ・･繝ｻ・ｸ繝ｻ・ｶ驛｢・ｩ繝ｻ・ｧ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｭ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・｢")
+                    raise CacheCancelledError("缓存已停止")
                 if not self._should_cache(item_id):
                     self._terminate_process(process)
                     raise CacheCancelledError(self._outside_window_message())
@@ -1036,8 +1036,8 @@ class CacheManager:
         if return_code != 0:
             raise DownloadCommandError(last_message)
         if not output_file.exists():
-            raise DownloadCommandError("FFmpeg 鬯ｮ・ｮ髮懶ｽ｣繝ｻ・ｽ繝ｻ・ｺ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｷ鬯ｮ・ｮ髮懶ｽ｣繝ｻ・ｽ繝ｻ・ｬ鬩包ｽｶ闕ｵ諤懈ｬｾ郢晢ｽｻ繝ｻ・ｽ郢晢ｽｻ繝ｻ・ｮ鬮ｫ・ｴ繝ｻ・ｴ郢晢ｽｻ繝ｻ・ｧ鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｻ鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｻ鬮ｯ貅ｷ譯√・・ｽ繝ｻ・｡驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｽ鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｻ鬮ｫ・ｰ髮具ｽｻ繝ｻ・ｽ繝ｻ・ｴ鬯ｯ・ｨ繝ｻ・ｾ髯溘・螻ｮ繝ｻ・ｽ繝ｻ・ｻ鬮ｦ・ｮ陷ｷ・ｶ郢晢ｽｻ鬯ｯ・ｮ繝ｻ・ｴ髯橸ｽｳ隰紋ｼ夲ｽｽ・ｧ鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｻ鬯ｮ・ｫ繝ｻ・ｴ驕ｶ荳橸ｽ｣・ｹ郢晢ｽｻ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｻ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｶ")
-
+            raise DownloadCommandError("FFmpeg 混流完成，但未生成输出文件")
+        
         self.store.update_item(
             item_id,
             cache_progress=99.0,
@@ -1130,7 +1130,7 @@ class CacheManager:
                 **self._hidden_process_kwargs(),
             )
             if process.returncode != 0 or not variant_path.exists():
-                raise DownloadCommandError(process.stderr.strip() or process.stdout.strip() or f"鬯ｯ・ｨ繝ｻ・ｾ髯溘・螻ｮ繝ｻ・ｽ繝ｻ・ｻ鬮ｦ・ｮ陷ｷ・ｶ郢晢ｽｻ鬯ｯ・ｯ繝ｻ・ｮ郢晢ｽｻ繝ｻ・ｻ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｳ鬯ｯ・ｮ繝ｻ・ｴ鬯ｮ・ｮ繝ｻ・｣郢晢ｽｻ繝ｻ・ｽ郢晢ｽｻ繝ｻ・ｨ鬯ｮ・ｯ繝ｻ・ｷ郢晢ｽｻ繝ｻ・ｿ鬮ｯ蛹ｺ・ｺ蛟･繝ｻ郢晢ｽｻ繝ｻ・ｽ郢晢ｽｻ繝ｻ・ｽ鬮ｴ髮｣・ｽ・｣髯句ｸ吶・繝ｻ・ｽ繝ｻ・ｽ郢晢ｽｻ繝ｻ・､驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｱ鬯ｯ・ｮ繝ｻ・ｮ髫ｰ・ｳ繝ｻ・ｾ郢晢ｽｻ繝ｻ・ｽ郢晢ｽｻ繝ｻ・･: {label}")
+                raise DownloadCommandError(process.stderr.strip() or process.stdout.strip() or f"生成音轨变体失败: {label}")
             self._record_item_activity(item.id)
             variant_files.append((variant_id, label, variant_path))
         return variant_files
@@ -1195,7 +1195,7 @@ class CacheManager:
             if override and override.exists():
                 with self.lock:
                     self.binary_state = "ready"
-                    self.binary_message = f"鬯ｮ・｣陷ｴ繝ｻ・ｽ・ｽ繝ｻ・ｴ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｿ鬯ｯ・ｨ繝ｻ・ｾ髯具ｽｹ郢晢ｽｻ繝ｻ・ｽ繝ｻ・ｽ郢晢ｽｻ繝ｻ・ｨ鬯ｮ・ｯ隶灘･・ｽｽ・ｺ繝ｻ・ｷ郢晢ｽｻ繝ｻ・､髫ｲ・ｷ陞｢・ｹ郢晢ｽｻBBDown: {override}"
+                    self.binary_message = f"使用外部 BBDown: {override}"
                 return override
 
             current_binary = self._local_binary_path()
@@ -1213,12 +1213,12 @@ class CacheManager:
                 with self.lock:
                     self.binary_state = "ready"
                     self.binary_version = latest_version
-                    self.binary_message = f"BBDown {latest_version} 鬯ｮ・ｯ隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｾ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｲ鬯ｮ・ｯ隴擾ｽｴ郢晢ｽｻ郢晢ｽｻ繝ｻ・ｽ郢晢ｽｻ繝ｻ・ｱ鬮ｫ・ｰ郢晢ｽｻ髢ｧ・ｩ郢晢ｽｻ繝ｻ・ｽ郢晢ｽｻ繝ｻ・ｪ"
+                    self.binary_message = f"BBDown {latest_version} 已就绪"
                 return current_binary
 
             with self.lock:
                 self.binary_state = "installing"
-                self.binary_message = "鬯ｮ・ｮ陟托ｽｱ郢晢ｽｻ郢晢ｽｻ繝ｻ・ｽ郢晢ｽｻ繝ｻ・｣鬯ｮ・ｯ隲幢ｽｶ繝ｻ・ｽ繝ｻ・ｨ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｨ鬯ｮ・ｯ雋頑瑳・ｱ螢ｹ繝ｻ繝ｻ・ｽ郢晢ｽｻ繝ｻ・ｺ鬯ｮ・ｯ陷茨ｽｷ繝ｻ・ｽ繝ｻ・ｻ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｶ鬯ｮ・ｫ繝ｻ・ｴ髯ｷ・ｴ郢晢ｽｻ繝ｻ・ｽ繝ｻ・ｽ郢晢ｽｻ繝ｻ・ｴ鬯ｮ・ｫ繝ｻ・ｴ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｽ郢晢ｽｻ繝ｻ・ｰ BBDown" if force_refresh else "鬯ｮ・ｮ陟托ｽｱ郢晢ｽｻ郢晢ｽｻ繝ｻ・ｽ郢晢ｽｻ繝ｻ・｣鬯ｮ・ｯ隲幢ｽｶ繝ｻ・ｽ繝ｻ・ｨ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｨ鬯ｮ・ｫ繝ｻ・ｴ郢晢ｽｻ繝ｻ・ｽ郢晢ｽｻ邵ｺ・､・つ鬯ｮ・ｫ繝ｻ・ｴ髮狗ｿｫ・代・・ｽ繝ｻ・ｽ郢晢ｽｻ繝ｻ・･鬯ｮ・ｯ繝ｻ・ｷ郢晢ｽｻ繝ｻ・･鬮ｫ・ｴ繝ｻ・ｴ郢晢ｽｻ繝ｻ・ｧ鬮ｯ譎｢・ｽ・ｲ郢晢ｽｻ繝ｻ・ｩ鬯ｮ・ｫ繝ｻ・ｴ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｽ郢晢ｽｻ繝ｻ・ｰ BBDown"
+                self.binary_message = "正在强制更新 BBDown" if force_refresh else "正在检查和更新 BBDown"
 
             asset = self._select_asset(release)
             tmp_archive = BB_DOWN_DIR / asset["name"]
@@ -1227,7 +1227,7 @@ class CacheManager:
             tmp_archive.unlink(missing_ok=True)
 
             if not current_binary.exists():
-                raise RuntimeError("鬯ｮ・｣陋ｹ繝ｻ・ｽ・ｽ繝ｻ・ｳ鬯ｩ髦ｪ繝ｻ驕倪・繝ｻ繝ｻ・ｽ郢晢ｽｻ繝ｻ・ｽ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｽ鬯ｮ・ｯ隶厄ｽｸ繝ｻ・ｽ繝ｻ・ｳ鬮ｫ・ｴ繝ｻ・ｴ郢晢ｽｻ繝ｻ・ｧ鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｻ鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｻ鬮ｯ貅ｷ譯√・・ｽ繝ｻ・｡驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｽ鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｻ鬮ｫ・ｰ髮具ｽｻ繝ｻ・ｽ繝ｻ・ｴ鬯ｮ・ｫ繝ｻ・ｰ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｽ郢晢ｽｻ繝ｻ・ｾ鬯ｮ・ｯ陷茨ｽｷ繝ｻ・ｽ繝ｻ・ｻ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｰ BBDown 鬯ｮ・ｯ繝ｻ・ｷ郢晢ｽｻ繝ｻ・ｿ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｯ鬯ｮ・ｫ繝ｻ・ｰ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｽ郢晢ｽｻ繝ｻ・ｧ鬯ｯ・ｮ繝ｻ・ｯ郢晢ｽｻ繝ｻ・ｦ鬮ｫ・ｴ繝ｻ・ｴ郢晢ｽｻ繝ｻ・ｧ鬮ｫ・ｴ繝ｻ・ｫ髯樊ｻ・ｽ｡菴ｯﾂ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｶ")
+                raise RuntimeError("下载完成，但未找到 BBDown 可执行文件")
 
             current_binary.chmod(current_binary.stat().st_mode | stat.S_IEXEC)
             BB_DOWN_VERSION_FILE.write_text(latest_version, encoding="utf-8")
@@ -1235,7 +1235,7 @@ class CacheManager:
             with self.lock:
                 self.binary_state = "ready"
                 self.binary_version = latest_version
-                self.binary_message = f"BBDown {latest_version} 鬯ｮ・ｯ隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｾ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｲ鬯ｮ・ｫ繝ｻ・ｴ髯ｷ・ｴ郢晢ｽｻ繝ｻ・ｽ繝ｻ・ｽ郢晢ｽｻ繝ｻ・ｴ鬯ｮ・ｫ繝ｻ・ｴ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｽ郢晢ｽｻ繝ｻ・ｰ"
+                self.binary_message = f"BBDown {latest_version} 已更新"
 
             return current_binary
 
@@ -1261,14 +1261,14 @@ class CacheManager:
         elif system == "windows" and machine in {"x86_64", "amd64"}:
             token = "win-x64"
         else:
-            raise RuntimeError(f"鬯ｮ・ｯ雋贋ｼ夲ｽｽ・ｹ雎ｺ讖ｸ・ｽ・ｧ鬮ｴ雜｣・ｽ・ｯ髫ｰ遒・｣ｰ謇假ｽｽ・ｿ繝ｻ・､驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｳ鬯ｮ・ｯ繝ｻ・ｷ郢晢ｽｻ繝ｻ・ｿ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｰ鬯ｮ・ｫ繝ｻ・ｴ髯晢ｽｲ繝ｻ・ｨ郢晢ｽｻ鬩帙・・ｽ・ｬ髮具ｽｻ繝ｻ・ｽ繝ｻ・ｴ鬯ｯ・ｯ繝ｻ・ｨ郢晢ｽｻ繝ｻ・ｾ鬩幢ｽ｢繝ｻ・ｧ髣包ｽｵ隴擾ｽｴ郢晢ｽｻ BBDown 鬯ｯ・ｮ繝ｻ・｢郢晢ｽｻ繝ｻ・ｾ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｪ鬯ｮ・ｯ繝ｻ・ｷ髣費ｽｨ陞滂ｽｲ繝ｻ・ｽ繝ｻ・ｽ郢晢ｽｻ繝ｻ・ｨ鬯ｮ・｣陋ｹ繝ｻ・ｽ・ｽ繝ｻ・ｳ鬯ｩ髦ｪ繝ｻ驕倪・繝ｻ繝ｻ・ｽ郢晢ｽｻ繝ｻ・ｽ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｽ: {system}/{machine}")
-
+            raise RuntimeError(f"当前平台暂未适配 BBDown 自动下载: {system}/{machine}")
+        
         assets = release.get("assets") or []
         for asset in assets:
             name = str(asset.get("name") or "").lower()
             if token in name and (name.endswith(".zip") or name.endswith(".tar.gz")):
                 return asset
-        raise RuntimeError(f"鬯ｮ・ｮ陷ｿ蜀ｶ繝ｻ郢晢ｽｻ繝ｻ・ｽ郢晢ｽｻ繝ｻ・｡鬯ｮ・ｫ繝ｻ・ｴ髯晢ｽｶ繝ｻ・ｷ髯具ｽｻ繝ｻ・､鬮｣雋ｻ・ｽ・ｨ郢晢ｽｻ繝ｻ・ｽ鬯ｮ・ｯ陷茨ｽｷ繝ｻ・ｽ繝ｻ・ｻ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｰ鬯ｯ・ｯ繝ｻ・ｨ郢晢ｽｻ繝ｻ・ｾ鬩幢ｽ｢繝ｻ・ｧ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｲ鬩阪・遘√・・｣繝ｻ・ｰ髣包ｽｵ雎ｺ讖ｸ・ｽ・ｧ鬮ｴ雜｣・ｽ・ｯ髫ｰ遒・｣ｰ謇假ｽｽ・ｿ繝ｻ・､驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｳ鬯ｮ・ｯ繝ｻ・ｷ郢晢ｽｻ繝ｻ・ｿ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｰ鬯ｯ・ｨ繝ｻ・ｾ郢晢ｽｻ繝ｻ・ｧ鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｻBBDown 鬯ｮ・ｯ隶厄ｽｸ繝ｻ・ｽ繝ｻ・ｳ鬯ｮ・｣郢晢ｽｻ繝ｻ・ｽ繝ｻ・ｽ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・｣鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｻ鬮ｫ・ｴ繝ｻ・ｯ驛｢譎｢・ｽ・ｻ {token}")
+        raise RuntimeError(f"没有找到适合当前平台的 BBDown 安装包: {token}")
 
     def _extract_archive(self, archive_path: Path, output_dir: Path) -> None:
         for child in output_dir.iterdir():
@@ -1284,8 +1284,8 @@ class CacheManager:
             with tarfile.open(archive_path, "r:gz") as tf:
                 tf.extractall(output_dir)
         else:
-            raise RuntimeError(f"鬯ｮ・｣陋ｹ繝ｻ・ｽ・ｽ繝ｻ・ｳ鬯ｮ・｢繝ｻ・ｧ郢晢ｽｻ繝ｻ・ｴ鬯ｯ・ｯ繝ｻ・ｮ郢晢ｽｻ繝ｻ・ｪ鬯ｮ・ｫ繝ｻ・ｰ髯懶｣ｰ闕ｵ蜉ｱ窶ｲ鬮ｯ諛・ｽｶ・｣繝ｻ・ｽ繝ｻ・ｪ BBDown 鬯ｮ・ｯ繝ｻ・ｷ郢晢ｽｻ繝ｻ・ｴ鬮ｴ謇假ｽｽ・｢髫ｴ莨夲ｽｽ・ｦ郢晢ｽｻ繝ｻ・ｽ郢晢ｽｻ繝ｻ・ｼ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｩ鬯ｮ・ｯ陷茨ｽｷ繝ｻ・ｽ繝ｻ・ｹ鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｻ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｰ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｼ鬯ｮ・ｯ雋贋ｼ夲ｽｽ・ｻ繝ｻ・｣驛｢譎｢・ｽ・ｻ {archive_path.name}")
-
+            raise RuntimeError(f"不支持的 BBDown 压缩包格式: {archive_path.name}")
+        
     def _local_binary_path(self) -> Path:
         return BB_DOWN_DIR / ("BBDown.exe" if os.name == "nt" else "BBDown")
 
@@ -1353,12 +1353,12 @@ class CacheManager:
     def _display_message(line: str, progress: float | None) -> str:
         if progress is not None:
             return f"Caching {round(progress)}%"
-        return "Caching..."
+        return f"缓存中 {round(progress)}%"
 
     @staticmethod
     def _should_force_refresh_bbdown(message: str) -> bool:
         text = str(message or "")
-        return "latest version" in text or "download the latest version" in text
+        return "升级到最新版本" in text or "最新版本后重试" in text
 
     @staticmethod
     def _extract_progress(line: str) -> float | None:
@@ -1377,16 +1377,16 @@ class CacheManager:
             if override and override.exists():
                 version = self._read_ffmpeg_version(override)
                 if not version:
-                    raise RuntimeError(f"鬯ｮ・ｯ隶灘･・ｽｽ・ｺ繝ｻ・ｷ郢晢ｽｻ繝ｻ・､髫ｲ・ｷ陞｢・ｹ郢晢ｽｻFFmpeg 鬯ｮ・｣陋ｹ繝ｻ・ｽ・ｽ繝ｻ・ｳ鬮ｫ・ｶ隴幢ｽｱ陞ｳ・ｦ郢晢ｽｻ繝ｻ・ｺ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｬ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｽ郢晢ｽｻ繝ｻ・ｧ鬯ｯ・ｮ繝ｻ・ｯ郢晢ｽｻ繝ｻ・ｦ鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｻ {override}")
+                    raise RuntimeError(f"外部 FFmpeg 不可执行: {override}")
                 with self.lock:
                     self.ffmpeg_state = "ready"
                     self.ffmpeg_version = version
-                    self.ffmpeg_message = f"鬯ｮ・｣陷ｴ繝ｻ・ｽ・ｽ繝ｻ・ｴ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｿ鬯ｯ・ｨ繝ｻ・ｾ髯具ｽｹ郢晢ｽｻ繝ｻ・ｽ繝ｻ・ｽ郢晢ｽｻ繝ｻ・ｨ鬯ｮ・ｯ隶灘･・ｽｽ・ｺ繝ｻ・ｷ郢晢ｽｻ繝ｻ・､髫ｲ・ｷ陞｢・ｹ郢晢ｽｻFFmpeg: {override}"
+                    self.ffmpeg_message = f"使用外部 FFmpeg: {override}"
                 return override
 
             with self.lock:
                 self.ffmpeg_state = "checking"
-                self.ffmpeg_message = "鬯ｮ・ｮ陟托ｽｱ郢晢ｽｻ郢晢ｽｻ繝ｻ・ｽ郢晢ｽｻ繝ｻ・｣鬯ｮ・ｯ隲幢ｽｶ繝ｻ・ｽ繝ｻ・ｨ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｨ鬯ｮ・ｯ繝ｻ・ｷ驛｢譎｢・ｽ・ｻ驛｢譎｢・ｽ・ｻ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・､鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｻFFmpeg"
+                self.ffmpeg_message = "正在准备 FFmpeg"
 
             source_ffmpeg, source_ffprobe = self._preferred_ffmpeg_sources()
             runtime_ffmpeg = FFMPEG_RUNTIME_PATH
@@ -1398,15 +1398,15 @@ class CacheManager:
                 if source_ffprobe:
                     self._sync_runtime_tool(source_ffprobe, runtime_ffprobe, force_refresh=force_refresh)
             elif not runtime_ffmpeg.exists():
-                raise RuntimeError("鬯ｮ・ｫ繝ｻ・ｴ髯晢ｽｷ繝ｻ・｢郢晢ｽｻ繝ｻ・ｽ郢晢ｽｻ繝ｻ・ｪ鬯ｮ・ｫ繝ｻ・ｰ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｽ郢晢ｽｻ繝ｻ・ｾ鬯ｮ・ｯ陷茨ｽｷ繝ｻ・ｽ繝ｻ・ｻ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｰ鬯ｮ・ｯ繝ｻ・ｷ郢晢ｽｻ繝ｻ・ｿ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｯ鬯ｯ・ｨ繝ｻ・ｾ髯具ｽｹ郢晢ｽｻ繝ｻ・ｽ繝ｻ・ｽ郢晢ｽｻ繝ｻ・ｨ鬯ｯ・ｨ繝ｻ・ｾ郢晢ｽｻ繝ｻ・ｧ鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｻffmpeg鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｻ鬮ｫ・ｰ騾搾ｽｲ繝ｻ・ｺ繝ｻ・ｷ郢晢ｽｻ繝ｻ・ｺ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｩ郢晢ｽｻ繝ｻ・･鬯ｮ・｢繝ｻ・ｧ郢晢ｽｻ繝ｻ・ｴ鬯ｨ・ｾ繝ｻ・ｵ郢晢ｽｻ繝ｻ・ｰ鬯ｮ・ｫ繝ｻ・ｰ驛｢譎｢・ｽ・ｻ繝ｻ繧托ｽｽ・ｧ鬮ｫ・ｴ繝ｻ・ｯ驕ｶ謫ｾ・ｽ・ｬ郢晢ｽｻ繝ｻ・ｬ髫ｰ逍ｲ・ｺ蛟･繝ｻ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｮ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｾ鬯ｯ・ｩ陷会ｽｱ繝ｻ莉｣繝ｻ繝ｻ・ｽ郢晢ｽｻ繝ｻ・ｮ FFMPEG_PATH")
-
+                raise RuntimeError("未找到可用的 ffmpeg，可重新打包或设置 FFMPEG_PATH")
+            
             version = self._read_ffmpeg_version(runtime_ffmpeg)
             if not version:
-                raise RuntimeError(f"FFmpeg 鬯ｮ・｣陋ｹ繝ｻ・ｽ・ｽ繝ｻ・ｳ鬮ｫ・ｶ隴幢ｽｱ陞ｳ・ｦ郢晢ｽｻ繝ｻ・ｺ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｬ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｽ郢晢ｽｻ繝ｻ・ｧ鬯ｯ・ｮ繝ｻ・ｯ郢晢ｽｻ繝ｻ・ｦ鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｻ {runtime_ffmpeg}")
+                raise RuntimeError(f"FFmpeg 不可执行: {runtime_ffmpeg}")
             with self.lock:
                 self.ffmpeg_state = "ready"
                 self.ffmpeg_version = version
-                self.ffmpeg_message = f"FFmpeg {version} 鬯ｮ・ｯ隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｾ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｲ鬯ｮ・ｯ隴擾ｽｴ郢晢ｽｻ郢晢ｽｻ繝ｻ・ｽ郢晢ｽｻ繝ｻ・ｱ鬮ｫ・ｰ郢晢ｽｻ髢ｧ・ｩ郢晢ｽｻ繝ｻ・ｽ郢晢ｽｻ繝ｻ・ｪ" if version else "FFmpeg 鬯ｮ・ｯ隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｾ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｲ鬯ｮ・ｯ隴擾ｽｴ郢晢ｽｻ郢晢ｽｻ繝ｻ・ｽ郢晢ｽｻ繝ｻ・ｱ鬮ｫ・ｰ郢晢ｽｻ髢ｧ・ｩ郢晢ｽｻ繝ｻ・ｽ郢晢ｽｻ繝ｻ・ｪ"
+                self.ffmpeg_message = f"FFmpeg {version} 已就绪" if version else "FFmpeg 已就绪"
             return runtime_ffmpeg
 
     def _preferred_ffmpeg_sources(self) -> tuple[Path | None, Path | None]:
@@ -1658,20 +1658,19 @@ class CacheManager:
             with self.lock:
                 if self.ffmpeg_state == "idle":
                     self.ffmpeg_state = "checking"
-                    self.ffmpeg_message = "鬯ｮ・ｯ繝ｻ・ｷ郢晢ｽｻ繝ｻ・ｷ鬮｣蛹・ｽｽ・ｳ郢晢ｽｻ繝ｻ・ｻ鬮ｯ貊捺・繝ｻ・｡闖ｫ・ｶ・つ陞ｳ闌ｨ・ｽ・ｹ隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｻ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・､鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｻFFmpeg 鬯ｮ・｣陋ｹ繝ｻ・ｽ・ｽ繝ｻ・ｳ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｭ"
+                    self.ffmpeg_message = "后台准备 FFmpeg 中"
             self._ensure_ffmpeg(force_refresh=True)
         except Exception as exc:  # noqa: BLE001
             with self.lock:
                 self.ffmpeg_state = "failed"
-                self.ffmpeg_message = f"FFmpeg 鬯ｮ・ｯ繝ｻ・ｷ驛｢譎｢・ｽ・ｻ驛｢譎｢・ｽ・ｻ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・､鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｻ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・､驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｱ鬯ｯ・ｮ繝ｻ・ｮ髫ｰ・ｳ繝ｻ・ｾ郢晢ｽｻ繝ｻ・ｽ郢晢ｽｻ繝ｻ・･: {exc}"
-
+                self.ffmpeg_message = f"FFmpeg 准备失败: {exc}"
         try:
             with self.lock:
                 if self.binary_state == "idle":
                     self.binary_state = "checking"
-                    self.binary_message = "鬯ｮ・ｯ繝ｻ・ｷ郢晢ｽｻ繝ｻ・ｷ鬮｣蛹・ｽｽ・ｳ郢晢ｽｻ繝ｻ・ｻ鬮ｯ貊捺・繝ｻ・｡陋帙・・ｽ・ｽ繝ｻ・ｭ郢晢ｽｻ繝ｻ・ｽ郢晢ｽｻ邵ｺ・､・つ鬯ｮ・ｫ繝ｻ・ｴ髮狗ｿｫ・代・・ｽ繝ｻ・ｽ郢晢ｽｻ繝ｻ・･ BBDown 鬯ｮ・ｫ繝ｻ・ｴ髯ｷ・ｴ郢晢ｽｻ繝ｻ・ｽ繝ｻ・ｽ郢晢ｽｻ繝ｻ・ｴ鬯ｮ・ｫ繝ｻ・ｴ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｽ郢晢ｽｻ繝ｻ・ｰ鬯ｮ・｣陋ｹ繝ｻ・ｽ・ｽ繝ｻ・ｳ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｭ"
+                    self.binary_message = "后台检查 BBDown 更新中"
             self._ensure_bbdown()
         except Exception as exc:  # noqa: BLE001
             with self.lock:
                 self.binary_state = "failed"
-                self.binary_message = f"BBDown 鬯ｮ・ｫ繝ｻ・ｴ郢晢ｽｻ繝ｻ・ｽ郢晢ｽｻ邵ｺ・､・つ鬯ｮ・ｫ繝ｻ・ｴ髮狗ｿｫ・代・・ｽ繝ｻ・ｽ郢晢ｽｻ繝ｻ・･鬯ｮ・ｯ隶灘･・ｽｽ・ｻ郢ｧ謇假ｽｽ・ｽ繝ｻ・ｽ郢晢ｽｻ繝ｻ・ｱ鬯ｯ・ｮ繝ｻ・ｮ髫ｰ・ｳ繝ｻ・ｾ郢晢ｽｻ繝ｻ・ｽ郢晢ｽｻ繝ｻ・･: {exc}"
+                self.binary_message = f"BBDown 检查失败: {exc}"
