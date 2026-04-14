@@ -4,6 +4,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
+import bilikara.bilibili as bilibili_module
 from bilikara.bilibili import VideoPage, fetch_video_item, resolve_video_reference, select_matching_pages
 from bilikara.models import PlaylistItem
 from bilikara.store import PlaylistStore
@@ -421,6 +422,43 @@ class BilibiliParserTest(unittest.TestCase):
         self.assertEqual(item.owner_name, "example-up")
         self.assertEqual(item.owner_url, "https://space.bilibili.com/114514")
         self.assertEqual(item.selected_audio_variant_id, "part_2")
+
+    def test_fetch_gatcha_videos_for_uid_retries_once_on_412(self):
+        if not hasattr(bilibili_module, "_fetch_gatcha_videos_for_uid"):
+            self.skipTest("gatcha fetch is not available on this branch")
+
+        with (
+            patch("bilikara.bilibili.time.sleep") as mock_sleep,
+            patch("bilikara.bilibili.time.monotonic") as mock_monotonic,
+            patch("bilikara.bilibili.request_json") as mock_request_json,
+            patch("bilikara.bilibili.get_cached_wbi_keys") as mock_get_cached_wbi_keys,
+        ):
+            mock_get_cached_wbi_keys.return_value = ("a" * 32, "b" * 32)
+            mock_monotonic.side_effect = [100.0, 100.0, 103.5, 103.5]
+            mock_request_json.side_effect = [
+                {"code": 412, "message": "412 Precondition Failed"},
+                {
+                    "code": 0,
+                    "data": {
+                        "list": {
+                            "vlist": [
+                                {"bvid": "BV1xx411c7mD", "title": "karaoke sample"},
+                                {"bvid": "BV1yy411c7mD", "title": "other sample"},
+                            ]
+                        }
+                    },
+                },
+            ]
+
+            with (
+                patch.object(bilibili_module, "GATCHA_KEYWORDS", ["karaoke"], create=True),
+                patch.object(bilibili_module, "_GATCHA_LAST_REQUEST_AT", 0.0, create=True),
+            ):
+                entries = bilibili_module._fetch_gatcha_videos_for_uid("123")
+
+        self.assertEqual(len(entries), 1)
+        self.assertEqual(entries[0]["bvid"], "BV1xx411c7mD")
+        mock_sleep.assert_called_once_with(bilibili_module.GATCHA_RETRY_DELAY_SECONDS)
 
 
 if __name__ == "__main__":
