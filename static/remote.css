@@ -151,6 +151,78 @@ h1 {
   gap: 10px;
 }
 
+.remote-setting-panel {
+  margin-top: 14px;
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.68);
+  border: 1px solid rgba(67, 53, 41, 0.08);
+}
+
+.remote-setting-copy {
+  display: grid;
+  gap: 6px;
+}
+
+.remote-setting-controls {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.remote-input-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 42px;
+  padding: 0 14px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid rgba(202, 91, 60, 0.16);
+  color: var(--muted);
+}
+
+.remote-input-wrap input[type="number"] {
+  width: 96px;
+  border: none;
+  background: transparent;
+  text-align: right;
+  color: var(--ink);
+  outline: none;
+}
+
+.remote-step-button,
+.remote-mute-button {
+  min-height: 42px;
+  border-radius: 14px;
+  font-weight: 700;
+  box-shadow: 0 10px 20px rgba(79, 56, 39, 0.08);
+}
+
+.remote-step-button:hover,
+.remote-mute-button:hover {
+  box-shadow: 0 12px 24px rgba(202, 91, 60, 0.12);
+}
+
+.remote-mute-button.is-muted {
+  background: var(--accent);
+  color: white;
+}
+
+.remote-volume-slider {
+  width: min(220px, 50vw);
+  accent-color: var(--accent);
+}
+
+.remote-volume-value {
+  min-width: 52px;
+  text-align: right;
+  color: var(--accent-deep);
+}
+
 .player-control-row {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));

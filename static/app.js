@@ -160,19 +160,30 @@ function writeLocalPreference(key, value) {
 }
 
 function hydrateLocalPreferences() {
-  if (state.localPreferencesHydrated) {
-    return;
-  }
   state.localPlayerVolume = Math.max(
     0,
     Math.min(1, readLocalNumber(storageKeys.playerVolume, state.localPlayerVolume)),
   );
   state.localPlayerMuted = readLocalBoolean(storageKeys.playerMuted, state.localPlayerMuted);
-  state.localPreferencesHydrated = true;
 }
 
 function rememberedAvOffsetMs() {
   return boundedAvOffsetMs(readLocalNumber(storageKeys.avOffsetMs, 0));
+}
+
+function rememberedVolumePercent() {
+  return Math.max(0, Math.min(100, Math.round(readLocalNumber(storageKeys.playerVolume, 1) * 100)));
+}
+
+function rememberedMuted() {
+  return readLocalBoolean(storageKeys.playerMuted, false);
+}
+
+function syncLocalPlayerSettingsFromSnapshot(playerSettings) {
+  const volumePercent = Math.max(0, Math.min(100, Number(playerSettings?.volume_percent ?? 100)));
+  state.localPlayerVolume = volumePercent / 100;
+  state.localPlayerMuted = Boolean(playerSettings?.is_muted);
+  persistLocalVolumePreferences();
 }
 
 function clientHeaders(extraHeaders = {}) {
@@ -208,6 +219,7 @@ async function fetchState() {
     throw new Error(payload.error || "获取状态失败");
   }
   state.data = payload.data;
+  syncLocalPlayerSettingsFromSnapshot(state.data?.player_settings);
   if (!state.localOffsetRestoreApplied) {
     const rememberedOffset = rememberedAvOffsetMs();
     const serverOffset = Number(payload.data?.player_settings?.av_offset_ms || 0);
@@ -216,6 +228,20 @@ async function fetchState() {
       state.data = await apiPost("/api/player/av-offset", { offset_ms: rememberedOffset });
     } else {
       state.localOffsetRestoreApplied = true;
+    }
+  }
+  if (!state.localPreferencesHydrated) {
+    const rememberedVolume = rememberedVolumePercent();
+    const rememberedMute = rememberedMuted();
+    const serverVolume = Number(state.data?.player_settings?.volume_percent ?? 100);
+    const serverMuted = Boolean(state.data?.player_settings?.is_muted);
+    state.localPreferencesHydrated = true;
+    if (rememberedVolume !== serverVolume || rememberedMute !== serverMuted) {
+      state.data = await apiPost("/api/player/volume", {
+        volume_percent: rememberedVolume,
+        is_muted: rememberedMute,
+      });
+      syncLocalPlayerSettingsFromSnapshot(state.data?.player_settings);
     }
   }
   render();
@@ -263,6 +289,7 @@ function render() {
   renderAudioVariantBar(currentItem, data.playback_mode);
   renderAvSyncControls(data.playback_mode, data.player_settings);
   renderVolumeControls(data.playback_mode);
+  applyStoredVolumeToMountedPlayer();
   renderPlayer(currentItem, data.playback_mode);
   applyRemotePlayerControl(data.player_control_command, currentItem, data.playback_mode);
   renderQueueCurrent(currentItem);
@@ -772,8 +799,10 @@ function persistLocalVolumePreferences() {
   writeLocalPreference(storageKeys.playerMuted, state.localPlayerMuted);
 }
 
-function setLocalPlayerVolume(nextVolume, { unmute = true } = {}) {
+async function setLocalPlayerVolume(nextVolume, { unmute = true } = {}) {
   const normalizedVolume = Math.max(0, Math.min(1, Number(nextVolume || 0)));
+  const previousVolume = state.localPlayerVolume;
+  const previousMuted = state.localPlayerMuted;
   state.localPlayerVolume = normalizedVolume;
   if (unmute && normalizedVolume > 0) {
     state.localPlayerMuted = false;
@@ -781,13 +810,43 @@ function setLocalPlayerVolume(nextVolume, { unmute = true } = {}) {
   persistLocalVolumePreferences();
   applyStoredVolumeToMountedPlayer();
   renderVolumeControls(state.data?.playback_mode || "local");
+  try {
+    state.data = await apiPost("/api/player/volume", {
+      volume_percent: Math.round(normalizedVolume * 100),
+      is_muted: state.localPlayerMuted,
+    });
+    syncLocalPlayerSettingsFromSnapshot(state.data?.player_settings);
+    render();
+  } catch (error) {
+    state.localPlayerVolume = previousVolume;
+    state.localPlayerMuted = previousMuted;
+    persistLocalVolumePreferences();
+    applyStoredVolumeToMountedPlayer();
+    renderVolumeControls(state.data?.playback_mode || "local");
+    setFormMessage(error.message, true);
+  }
 }
 
-function toggleLocalPlayerMute() {
+async function toggleLocalPlayerMute() {
+  const previousMuted = state.localPlayerMuted;
   state.localPlayerMuted = !state.localPlayerMuted;
   persistLocalVolumePreferences();
   applyStoredVolumeToMountedPlayer();
   renderVolumeControls(state.data?.playback_mode || "local");
+  try {
+    state.data = await apiPost("/api/player/volume", {
+      volume_percent: Math.round(state.localPlayerVolume * 100),
+      is_muted: state.localPlayerMuted,
+    });
+    syncLocalPlayerSettingsFromSnapshot(state.data?.player_settings);
+    render();
+  } catch (error) {
+    state.localPlayerMuted = previousMuted;
+    persistLocalVolumePreferences();
+    applyStoredVolumeToMountedPlayer();
+    renderVolumeControls(state.data?.playback_mode || "local");
+    setFormMessage(error.message, true);
+  }
 }
 
 function audioVariantSwitchLocked() {

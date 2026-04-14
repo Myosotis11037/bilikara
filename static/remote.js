@@ -20,6 +20,12 @@ const elements = {
   audioVariantBar: document.getElementById("audio-variant-bar"),
   playerControlPanel: document.getElementById("player-control-panel"),
   playerControlHint: document.getElementById("player-control-hint"),
+  remoteAvSyncPanel: document.getElementById("remote-av-sync-panel"),
+  remoteAvOffsetInput: document.getElementById("remote-av-offset-input"),
+  remoteVolumePanel: document.getElementById("remote-volume-panel"),
+  remoteVolumeMuteButton: document.getElementById("remote-volume-mute-button"),
+  remoteVolumeSlider: document.getElementById("remote-volume-slider"),
+  remoteVolumeValue: document.getElementById("remote-volume-value"),
   requestForm: document.getElementById("request-form"),
   requesterSelect: document.getElementById("requester-select"),
   urlInput: document.getElementById("url-input"),
@@ -102,6 +108,8 @@ function render() {
   renderCurrentItem(data.current_item, data.playback_mode);
   renderAudioVariantBar(data.current_item, data.playback_mode);
   renderPlayerControls(data.current_item, data.playback_mode);
+  renderRemoteAvSyncControls(data.playback_mode, data.player_settings);
+  renderRemoteVolumeControls(data.playback_mode, data.player_settings);
   renderListHeader(data.playlist || [], data.history || []);
   renderQueue(Array.isArray(data.playlist) ? data.playlist : []);
   renderHistory(Array.isArray(data.history) ? data.history : []);
@@ -219,6 +227,77 @@ function renderAudioVariantBar(currentItem, playbackMode) {
     elements.audioVariantBar.appendChild(button);
   });
   elements.audioVariantBar.classList.remove("hidden");
+}
+
+function currentRemoteAvOffsetMs(playerSettings) {
+  return Number(playerSettings?.av_offset_ms || 0);
+}
+
+function currentRemoteVolumePercent(playerSettings) {
+  return Math.max(0, Math.min(100, Number(playerSettings?.volume_percent ?? 100)));
+}
+
+function currentRemoteMuted(playerSettings) {
+  return Boolean(playerSettings?.is_muted);
+}
+
+function renderRemoteAvSyncControls(playbackMode, playerSettings) {
+  if (!elements.remoteAvSyncPanel || !elements.remoteAvOffsetInput) {
+    return;
+  }
+  const isLocalMode = playbackMode === "local";
+  elements.remoteAvSyncPanel.classList.toggle("hidden", !isLocalMode);
+  elements.remoteAvOffsetInput.value = String(currentRemoteAvOffsetMs(playerSettings));
+}
+
+function renderRemoteVolumeControls(playbackMode, playerSettings) {
+  if (!elements.remoteVolumePanel || !elements.remoteVolumeSlider || !elements.remoteVolumeMuteButton || !elements.remoteVolumeValue) {
+    return;
+  }
+  const isLocalMode = playbackMode === "local";
+  elements.remoteVolumePanel.classList.toggle("hidden", !isLocalMode);
+  const volumePercent = currentRemoteVolumePercent(playerSettings);
+  const isMuted = currentRemoteMuted(playerSettings);
+  elements.remoteVolumeSlider.value = String(volumePercent);
+  elements.remoteVolumeValue.textContent = `${Math.round(volumePercent)}%`;
+  elements.remoteVolumeMuteButton.textContent = isMuted ? "取消静音" : "静音";
+  elements.remoteVolumeMuteButton.classList.toggle("is-muted", isMuted);
+}
+
+async function setRemoteAvOffset(offsetMs) {
+  const numeric = Number(offsetMs || 0);
+  if (!Number.isFinite(numeric)) {
+    return;
+  }
+  try {
+    state.data = await apiPost("/api/player/av-offset", { offset_ms: Math.max(-5000, Math.min(5000, Math.round(numeric))) });
+    render();
+  } catch (error) {
+    setFormMessage(error.message, true);
+  }
+}
+
+async function setRemoteVolumeSettings({ volumePercent, isMuted } = {}) {
+  const payload = {};
+  if (volumePercent !== undefined) {
+    const numeric = Number(volumePercent);
+    if (!Number.isFinite(numeric)) {
+      return;
+    }
+    payload.volume_percent = Math.max(0, Math.min(100, Math.round(numeric)));
+  }
+  if (isMuted !== undefined) {
+    payload.is_muted = Boolean(isMuted);
+  }
+  if (!Object.keys(payload).length) {
+    return;
+  }
+  try {
+    state.data = await apiPost("/api/player/volume", payload);
+    render();
+  } catch (error) {
+    setFormMessage(error.message, true);
+  }
 }
 
 function canRemoteControlPlayer(currentItem, playbackMode) {
@@ -524,6 +603,42 @@ elements.refreshButton.addEventListener("click", async () => {
     state.audioVariantSwitchInFlight = false;
     scheduleAudioVariantSwitchUnlock();
   }
+});
+
+elements.remoteAvSyncPanel?.addEventListener("click", async (event) => {
+  const button = event.target.closest("button[data-av-step]");
+  if (!button) {
+    return;
+  }
+  await setRemoteAvOffset(
+    currentRemoteAvOffsetMs(state.data?.player_settings) + Number(button.dataset.avStep || "0"),
+  );
+});
+
+elements.remoteAvOffsetInput?.addEventListener("change", async (event) => {
+  await setRemoteAvOffset(event.target.value);
+});
+
+elements.remoteAvOffsetInput?.addEventListener("keydown", async (event) => {
+  if (event.key !== "Enter") {
+    return;
+  }
+  event.preventDefault();
+  await setRemoteAvOffset(event.target.value);
+});
+
+elements.remoteVolumeSlider?.addEventListener("input", async (event) => {
+  await setRemoteVolumeSettings({
+    volumePercent: event.target.value,
+    isMuted: currentRemoteMuted(state.data?.player_settings),
+  });
+});
+
+elements.remoteVolumeMuteButton?.addEventListener("click", async () => {
+  await setRemoteVolumeSettings({
+    volumePercent: currentRemoteVolumePercent(state.data?.player_settings),
+    isMuted: !currentRemoteMuted(state.data?.player_settings),
+  });
 });
 
 elements.audioVariantBar.addEventListener("click", async (event) => {

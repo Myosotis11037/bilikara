@@ -43,6 +43,22 @@ class PlaylistStoreTest(unittest.TestCase):
         self.assertEqual(self.store.snapshot()["player_settings"]["av_offset_ms"], 230)
         self.assertEqual(restored_store.av_offset_ms, 230)
 
+    def test_volume_settings_persist_in_state_file(self):
+        self.store.set_volume_percent(35)
+        self.store.set_muted(True)
+
+        restored_store = PlaylistStore(
+            state_file=self.state_file,
+            backup_file=self.backup_file,
+            session_archive_dir=self.session_archive_dir,
+        )
+
+        snapshot = self.store.snapshot()["player_settings"]
+        self.assertEqual(snapshot["volume_percent"], 35)
+        self.assertTrue(snapshot["is_muted"])
+        self.assertEqual(restored_store.volume_percent, 35)
+        self.assertTrue(restored_store.is_muted)
+
     def make_item(self, item_id: str, *, song_key: str | None = None) -> PlaylistItem:
         key = song_key or item_id
         numeric = sum(ord(char) for char in key)
@@ -257,6 +273,8 @@ class PlaylistStoreTest(unittest.TestCase):
         self.store.add_item(item, requester_name="A")
         self.store.set_mode("local")
         self.store.set_av_offset_ms(180)
+        self.store.set_volume_percent(42)
+        self.store.set_muted(True)
 
         restored_store = PlaylistStore(
             state_file=self.state_file,
@@ -268,6 +286,8 @@ class PlaylistStoreTest(unittest.TestCase):
         self.assertTrue(restored_store.restore_backup())
         self.assertEqual(restored_store.playback_mode, "local")
         self.assertEqual(restored_store.av_offset_ms, 180)
+        self.assertEqual(restored_store.volume_percent, 42)
+        self.assertTrue(restored_store.is_muted)
         self.assertEqual(restored_store.current_item.id, "a")
         self.assertEqual([entry.id for entry in restored_store.playlist], [])
         restored_item = restored_store.current_item
