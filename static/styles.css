@@ -643,6 +643,13 @@ h2 {
   transform: translateY(-1px);
 }
 
+.audio-variant-button:disabled {
+  opacity: 0.58;
+  cursor: wait;
+  transform: none;
+  box-shadow: none;
+}
+
 .empty-state {
   padding: 24px;
   text-align: center;

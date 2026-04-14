@@ -1,4 +1,5 @@
 const pollIntervalMs = 1500;
+const audioVariantSwitchDebounceMs = 350;
 
 const state = {
   clientId: createClientId(),
@@ -7,6 +8,9 @@ const state = {
   submitting: false,
   listView: "queue",
   playerControlPendingAction: "",
+  audioVariantSwitchInFlight: false,
+  audioVariantSwitchUnlockAt: 0,
+  audioVariantSwitchTimer: null,
 };
 
 const elements = {
@@ -163,6 +167,29 @@ function selectedAudioVariantForItem(item) {
   return variants.find((variant) => variant.id === selectedId) || variants[0];
 }
 
+function audioVariantSwitchLocked() {
+  if (state.audioVariantSwitchInFlight && Date.now() >= state.audioVariantSwitchUnlockAt) {
+    state.audioVariantSwitchInFlight = false;
+  }
+  return state.audioVariantSwitchInFlight || Date.now() < state.audioVariantSwitchUnlockAt;
+}
+
+function scheduleAudioVariantSwitchUnlock() {
+  if (state.audioVariantSwitchTimer) {
+    window.clearTimeout(state.audioVariantSwitchTimer);
+    state.audioVariantSwitchTimer = null;
+  }
+  const remainingMs = Math.max(0, state.audioVariantSwitchUnlockAt - Date.now());
+  state.audioVariantSwitchTimer = window.setTimeout(() => {
+    state.audioVariantSwitchInFlight = false;
+    state.audioVariantSwitchUnlockAt = 0;
+    state.audioVariantSwitchTimer = null;
+    if (state.data) {
+      renderAudioVariantBar(state.data.current_item, state.data.playback_mode);
+    }
+  }, remainingMs);
+}
+
 function renderAudioVariantBar(currentItem, playbackMode) {
   if (playbackMode !== "local" || !currentItem) {
     elements.audioVariantBar.innerHTML = "";
@@ -178,6 +205,7 @@ function renderAudioVariantBar(currentItem, playbackMode) {
   }
 
   const selectedVariant = selectedAudioVariantForItem(currentItem);
+  const buttonsDisabled = audioVariantSwitchLocked();
   elements.audioVariantBar.innerHTML = "";
   variants.forEach((variant) => {
     const button = document.createElement("button");
@@ -186,6 +214,7 @@ function renderAudioVariantBar(currentItem, playbackMode) {
     button.textContent = variant.label || variant.id;
     button.dataset.itemId = currentItem.id;
     button.dataset.variantId = variant.id;
+    button.disabled = buttonsDisabled;
     button.classList.toggle("active", variant.id === selectedVariant?.id);
     elements.audioVariantBar.appendChild(button);
   });
@@ -491,13 +520,16 @@ elements.refreshButton.addEventListener("click", async () => {
     setFormMessage("列表已刷新。");
   } catch (error) {
     setFormMessage(error.message, true);
+  } finally {
+    state.audioVariantSwitchInFlight = false;
+    scheduleAudioVariantSwitchUnlock();
   }
 });
 
 elements.audioVariantBar.addEventListener("click", async (event) => {
   const button = event.target.closest("button[data-variant-id]");
   const currentItem = state.data?.current_item;
-  if (!button || !currentItem) {
+  if (!button || !currentItem || audioVariantSwitchLocked()) {
     return;
   }
   if (button.dataset.itemId !== currentItem.id) {
@@ -511,6 +543,9 @@ elements.audioVariantBar.addEventListener("click", async (event) => {
   }
 
   try {
+    state.audioVariantSwitchInFlight = true;
+    state.audioVariantSwitchUnlockAt = Date.now() + audioVariantSwitchDebounceMs;
+    renderAudioVariantBar(currentItem, state.data?.playback_mode);
     state.data = await apiPost("/api/player/audio-variant", {
       item_id: currentItem.id,
       variant_id: nextVariantId,
@@ -521,6 +556,9 @@ elements.audioVariantBar.addEventListener("click", async (event) => {
     setFormMessage(`已切换到 ${activeVariant?.label || nextVariantId}`);
   } catch (error) {
     setFormMessage(error.message, true);
+  } finally {
+    state.audioVariantSwitchInFlight = false;
+    scheduleAudioVariantSwitchUnlock();
   }
 });
 
