@@ -829,7 +829,53 @@ h2 {
   margin-top: 12px;
   display: flex;
   gap: 8px;
+  align-items: flex-start;
+}
+
+.audio-variant-list {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  gap: 8px;
   flex-wrap: wrap;
+  overflow: hidden;
+}
+
+.audio-variant-bar.is-collapsed .audio-variant-list {
+  max-height: var(--audio-variant-collapsed-height, 44px);
+}
+
+.audio-variant-toggle {
+  flex: 0 0 auto;
+  width: 34px;
+  height: 34px;
+  border: 1px solid rgba(208, 90, 63, 0.16);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.82);
+  color: var(--accent-deep);
+  cursor: pointer;
+  transition:
+    transform 180ms ease,
+    background 180ms ease,
+    color 180ms ease,
+    box-shadow 180ms ease;
+}
+
+.audio-variant-toggle:hover {
+  transform: translateY(-1px);
+}
+
+.audio-variant-toggle span {
+  display: inline-block;
+  transition: transform 180ms ease;
+}
+
+.audio-variant-toggle.is-expanded span {
+  transform: rotate(180deg);
+}
+
+.audio-variant-toggle.hidden {
+  display: none;
 }
 
 .av-sync-panel {

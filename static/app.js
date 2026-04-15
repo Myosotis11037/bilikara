@@ -28,6 +28,8 @@ const state = {
   audioVariantSwitchInFlight: false,
   audioVariantSwitchUnlockAt: 0,
   audioVariantSwitchTimer: null,
+  audioVariantBarExpanded: false,
+  audioVariantBarItemId: "",
   backupBannerShown: false,
   backupBannerDismissed: false,
   backupBannerTimer: null,
@@ -1272,6 +1274,8 @@ function renderAudioVariantBar(currentItem, playbackMode) {
   if (playbackMode !== "local" || !currentItem) {
     elements.audioVariantBar.innerHTML = "";
     elements.audioVariantBar.classList.add("hidden");
+    state.audioVariantBarExpanded = false;
+    state.audioVariantBarItemId = "";
     return;
   }
 
@@ -1279,12 +1283,21 @@ function renderAudioVariantBar(currentItem, playbackMode) {
   if (variants.length <= 1) {
     elements.audioVariantBar.innerHTML = "";
     elements.audioVariantBar.classList.add("hidden");
+    state.audioVariantBarExpanded = false;
+    state.audioVariantBarItemId = currentItem.id;
     return;
+  }
+
+  if (state.audioVariantBarItemId !== currentItem.id) {
+    state.audioVariantBarExpanded = false;
+    state.audioVariantBarItemId = currentItem.id;
   }
 
   const selectedVariant = selectedAudioVariantForItem(currentItem);
   const buttonsDisabled = audioVariantSwitchLocked();
   elements.audioVariantBar.innerHTML = "";
+  const list = document.createElement("div");
+  list.className = "audio-variant-list";
   variants.forEach((variant) => {
     const button = document.createElement("button");
     button.type = "button";
@@ -1297,8 +1310,34 @@ function renderAudioVariantBar(currentItem, playbackMode) {
     button.disabled = variant.bound ? buttonsDisabled : false;
     button.classList.toggle("active", variant.bound && variant.id === selectedVariant?.id);
     button.classList.toggle("pending-bind", !variant.bound);
-    elements.audioVariantBar.appendChild(button);
+    list.appendChild(button);
   });
+
+  const toggleButton = document.createElement("button");
+  toggleButton.type = "button";
+  toggleButton.className = "audio-variant-toggle";
+  toggleButton.dataset.action = "toggle-audio-variants";
+  toggleButton.setAttribute("aria-label", state.audioVariantBarExpanded ? "收起分P列表" : "展开分P列表");
+  toggleButton.setAttribute("aria-expanded", String(state.audioVariantBarExpanded));
+  toggleButton.innerHTML = '<span aria-hidden="true">▾</span>';
+
+  elements.audioVariantBar.append(list, toggleButton);
+
+  const firstButton = list.querySelector(".audio-variant-button");
+  const firstRowHeight = firstButton
+    ? Math.ceil(firstButton.getBoundingClientRect().height) + 6
+    : 44;
+  const isWrapped = list.scrollHeight > firstRowHeight + 2;
+
+  elements.audioVariantBar.classList.toggle("is-collapsed", isWrapped && !state.audioVariantBarExpanded);
+  elements.audioVariantBar.classList.toggle("is-expanded", isWrapped && state.audioVariantBarExpanded);
+  toggleButton.classList.toggle("hidden", !isWrapped);
+  if (isWrapped) {
+    list.style.setProperty("--audio-variant-collapsed-height", `${firstRowHeight}px`);
+    toggleButton.classList.toggle("is-expanded", state.audioVariantBarExpanded);
+  } else {
+    state.audioVariantBarExpanded = false;
+  }
   elements.audioVariantBar.classList.remove("hidden");
 }
 
@@ -2887,6 +2926,15 @@ elements.layoutModeSwitch?.addEventListener("click", (event) => {
 });
 
 elements.audioVariantBar.addEventListener("click", async (event) => {
+  const toggleButton = event.target.closest('button[data-action="toggle-audio-variants"]');
+  if (toggleButton) {
+    state.audioVariantBarExpanded = !state.audioVariantBarExpanded;
+    if (state.data?.current_item) {
+      renderAudioVariantBar(state.data.current_item, state.data.playback_mode);
+    }
+    return;
+  }
+
   const button = event.target.closest("button[data-variant-id]");
   if (!button || !state.data?.current_item) {
     return;
