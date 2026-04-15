@@ -1,6 +1,7 @@
 const pollIntervalMs = 1000;
 const bannerAutoHideMs = 5000;
 const stalledRetrySeconds = 5;
+const gatchaCooldownMs = 15000;
 const localPlayerSyncIntervalMs = 120;
 const audioVariantSwitchDebounceMs = 350;
 const maxAvOffsetMs = 5000;
@@ -31,6 +32,11 @@ const state = {
   backupBannerShown: false,
   backupBannerDismissed: false,
   backupBannerTimer: null,
+  backupBannerCountdownTimer: null,
+  backupBannerDeadline: 0,
+  backupBannerRemainingMs: bannerAutoHideMs,
+  backupBannerPaused: false,
+  backupDismissHover: false,
   localAdvanceInFlight: false,
   localShouldBePlaying: false,
   localSeekResumePending: false,
@@ -46,7 +52,9 @@ const state = {
   confirmIntent: null,
   retryActivityById: {},
   gatchaCandidate: null,
-  layoutMode: "hardcore",
+  gatchaCooldownUntil: 0,
+  gatchaCooldownTimer: null,
+  layoutMode: "full",
 };
 
 const elements = {
@@ -126,6 +134,7 @@ const elements = {
   gatchaButton: document.getElementById("gatcha-button"),
   gatchaConfirmButton: document.getElementById("gatcha-confirm-button"),
   gatchaRetryButton: document.getElementById("gatcha-retry-button"),
+  gatchaMessage: document.getElementById("gatcha-message"),
   gatchaInitView: document.getElementById("gatcha-init-view"),
   gatchaResultView: document.getElementById("gatcha-result-view"),
   gatchaCandidateTitle: document.getElementById("gatcha-candidate-title"),
@@ -343,13 +352,16 @@ function hydrateLocalPreferences() {
 }
 
 function normalizeLayoutMode(value) {
-  return value === "normal" ? "normal" : "hardcore";
+  if (value === "basic" || value === "normal") {
+    return "basic";
+  }
+  return "full";
 }
 
 function renderLayoutMode() {
   const layoutMode = normalizeLayoutMode(state.layoutMode);
-  elements.appShell?.classList.toggle("layout-mode-normal", layoutMode === "normal");
-  elements.appShell?.classList.toggle("layout-mode-hardcore", layoutMode === "hardcore");
+  elements.appShell?.classList.toggle("layout-mode-basic", layoutMode === "basic");
+  elements.appShell?.classList.toggle("layout-mode-full", layoutMode === "full");
   elements.layoutModeSwitch?.querySelectorAll("button[data-layout-mode]").forEach((button) => {
     button.classList.toggle("active", button.dataset.layoutMode === layoutMode);
   });
@@ -503,7 +515,11 @@ function renderSearchResults(items) {
 }
 
 async function handleGatchaDraw() {
-  setFormMessage("正在连接 B 站寻找幸运投稿...");
+  if (gatchaCooldownRemainingSeconds() > 0) {
+    syncGatchaCooldownButtons();
+    return;
+  }
+  setGatchaMessage("正在连接 B 站寻找幸运投稿...");
   try {
     const response = await fetch("/api/gatcha/candidate", { headers: clientHeaders() });
     const payload = await response.json();
@@ -513,13 +529,55 @@ async function handleGatchaDraw() {
 
     state.gatchaCandidate = payload.data;
     elements.gatchaCandidateTitle.textContent = state.gatchaCandidate.title;
+    startGatchaCooldown();
     
     // 切换界面
     elements.gatchaInitView.classList.add("hidden");
     elements.gatchaResultView.classList.remove("hidden");
-    setFormMessage("运气不错！抽中了这首。");
+    setGatchaMessage("");
   } catch (error) {
-    setFormMessage(error.message, true);
+    setGatchaMessage(error.message, true);
+  }
+}
+
+function setGatchaMessage(message, isError = false) {
+  if (!elements.gatchaMessage) {
+    return;
+  }
+  elements.gatchaMessage.textContent = message || "";
+  elements.gatchaMessage.classList.toggle("is-error", Boolean(isError));
+}
+
+function gatchaCooldownRemainingSeconds() {
+  return Math.max(0, Math.ceil((state.gatchaCooldownUntil - Date.now()) / 1000));
+}
+
+function startGatchaCooldown() {
+  state.gatchaCooldownUntil = Date.now() + gatchaCooldownMs;
+  syncGatchaCooldownButtons();
+  if (state.gatchaCooldownTimer) {
+    clearInterval(state.gatchaCooldownTimer);
+  }
+  state.gatchaCooldownTimer = setInterval(() => {
+    syncGatchaCooldownButtons();
+    if (gatchaCooldownRemainingSeconds() <= 0) {
+      clearInterval(state.gatchaCooldownTimer);
+      state.gatchaCooldownTimer = null;
+    }
+  }, 250);
+}
+
+function syncGatchaCooldownButtons() {
+  const remainingSeconds = gatchaCooldownRemainingSeconds();
+  const coolingDown = remainingSeconds > 0;
+  const cooldownText = `等待 ${remainingSeconds}s`;
+  if (elements.gatchaButton) {
+    elements.gatchaButton.disabled = coolingDown;
+    elements.gatchaButton.textContent = coolingDown ? cooldownText : "试试运气";
+  }
+  if (elements.gatchaRetryButton) {
+    elements.gatchaRetryButton.disabled = coolingDown;
+    elements.gatchaRetryButton.textContent = coolingDown ? cooldownText : "重新再来";
   }
 }
 
@@ -2016,6 +2074,7 @@ function renderBackupBanner(backup, hasCurrentItem, queueLength, autoRestoredBac
   if (!backup?.available || !autoRestoredBackup) {
     clearBackupBannerTimer();
     elements.backupBanner.classList.add("hidden");
+    updateBackupDismissButton();
     return;
   }
 
@@ -2036,9 +2095,45 @@ function renderBackupBanner(backup, hasCurrentItem, queueLength, autoRestoredBac
 
 function startBackupBannerTimer() {
   clearBackupBannerTimer();
-  state.backupBannerTimer = window.setTimeout(() => {
-    dismissBackupBanner();
-  }, bannerAutoHideMs);
+  state.backupBannerPaused = false;
+  state.backupBannerRemainingMs = bannerAutoHideMs;
+  state.backupBannerDeadline = Date.now() + state.backupBannerRemainingMs;
+  updateBackupDismissButton();
+  startBackupBannerCountdown();
+}
+
+function startBackupBannerCountdown() {
+  clearBackupBannerCountdown();
+  state.backupBannerCountdownTimer = window.setInterval(() => {
+    if (state.backupBannerPaused) {
+      return;
+    }
+    state.backupBannerRemainingMs = Math.max(0, state.backupBannerDeadline - Date.now());
+    updateBackupDismissButton();
+    if (state.backupBannerRemainingMs <= 0) {
+      dismissBackupBanner();
+    }
+  }, 250);
+}
+
+function pauseBackupBannerTimer() {
+  if (state.backupBannerDismissed || state.backupBannerPaused) {
+    return;
+  }
+  state.backupBannerRemainingMs = Math.max(0, state.backupBannerDeadline - Date.now());
+  state.backupBannerPaused = true;
+  clearBackupBannerCountdown();
+  updateBackupDismissButton();
+}
+
+function resumeBackupBannerTimer() {
+  if (state.backupBannerDismissed || !state.backupBannerPaused) {
+    return;
+  }
+  state.backupBannerPaused = false;
+  state.backupBannerDeadline = Date.now() + state.backupBannerRemainingMs;
+  updateBackupDismissButton();
+  startBackupBannerCountdown();
 }
 
 function clearBackupBannerTimer() {
@@ -2046,12 +2141,36 @@ function clearBackupBannerTimer() {
     window.clearTimeout(state.backupBannerTimer);
     state.backupBannerTimer = null;
   }
+  clearBackupBannerCountdown();
+  state.backupBannerDeadline = 0;
+  state.backupBannerRemainingMs = bannerAutoHideMs;
+  state.backupBannerPaused = false;
+}
+
+function clearBackupBannerCountdown() {
+  if (state.backupBannerCountdownTimer) {
+    window.clearInterval(state.backupBannerCountdownTimer);
+    state.backupBannerCountdownTimer = null;
+  }
+}
+
+function updateBackupDismissButton() {
+  if (!elements.dismissBackupButton) {
+    return;
+  }
+  if (state.backupBannerDismissed || state.backupDismissHover) {
+    elements.dismissBackupButton.textContent = "×";
+    return;
+  }
+  const remainingSeconds = Math.max(1, Math.ceil(state.backupBannerRemainingMs / 1000));
+  elements.dismissBackupButton.textContent = `${remainingSeconds}`;
 }
 
 function dismissBackupBanner() {
   state.backupBannerDismissed = true;
   elements.backupBanner.classList.add("hidden");
   clearBackupBannerTimer();
+  updateBackupDismissButton();
 }
 
 function openConfirm(intent) {
@@ -2565,6 +2684,34 @@ elements.discardBackupButton.addEventListener("click", async () => {
 
 elements.dismissBackupButton.addEventListener("click", () => {
   dismissBackupBanner();
+});
+
+elements.backupBanner.addEventListener("mouseenter", () => {
+  pauseBackupBannerTimer();
+});
+
+elements.backupBanner.addEventListener("mouseleave", () => {
+  resumeBackupBannerTimer();
+});
+
+elements.dismissBackupButton.addEventListener("mouseenter", () => {
+  state.backupDismissHover = true;
+  updateBackupDismissButton();
+});
+
+elements.dismissBackupButton.addEventListener("mouseleave", () => {
+  state.backupDismissHover = false;
+  updateBackupDismissButton();
+});
+
+elements.dismissBackupButton.addEventListener("focus", () => {
+  state.backupDismissHover = true;
+  updateBackupDismissButton();
+});
+
+elements.dismissBackupButton.addEventListener("blur", () => {
+  state.backupDismissHover = false;
+  updateBackupDismissButton();
 });
 
 elements.cacheSettingsToggle.addEventListener("click", () => {

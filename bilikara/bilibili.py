@@ -617,7 +617,7 @@ def get_cached_wbi_keys():
 def fetch_gatcha_candidate() -> dict | None:
     candidates_by_uid = _local_gatcha_candidates_by_uid()
     if not candidates_by_uid:
-        raise BilibiliError("请填写gatcha所需cookie")
+        raise BilibiliError("请填写 cookie")
 
     chosen_mid = random.choice(list(candidates_by_uid.keys()))
     chosen = random.choice(candidates_by_uid[chosen_mid])

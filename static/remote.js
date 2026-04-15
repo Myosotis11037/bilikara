@@ -1,5 +1,6 @@
 const pollIntervalMs = 1500;
 const audioVariantSwitchDebounceMs = 350;
+const gatchaCooldownMs = 15000;
 const storageKeys = {
   layoutMode: "bilikara.remote.layout.mode",
 };
@@ -15,7 +16,9 @@ const state = {
   audioVariantSwitchUnlockAt: 0,
   audioVariantSwitchTimer: null,
   gatchaCandidate: null,
-  layoutMode: "hardcore",
+  gatchaCooldownUntil: 0,
+  gatchaCooldownTimer: null,
+  layoutMode: "full",
 };
 
 const elements = {
@@ -46,6 +49,7 @@ const elements = {
   gatchaButton: document.getElementById("gatcha-button"),
   gatchaConfirmButton: document.getElementById("gatcha-confirm-button"),
   gatchaRetryButton: document.getElementById("gatcha-retry-button"),
+  gatchaMessage: document.getElementById("gatcha-message"),
   gatchaInitView: document.getElementById("gatcha-init-view"),
   gatchaResultView: document.getElementById("gatcha-result-view"),
   gatchaCandidateTitle: document.getElementById("gatcha-candidate-title"),
@@ -101,7 +105,10 @@ function writeLocalPreference(key, value) {
 }
 
 function normalizeLayoutMode(value) {
-  return value === "normal" ? "normal" : "hardcore";
+  if (value === "basic" || value === "normal") {
+    return "basic";
+  }
+  return "full";
 }
 
 function hydrateLocalPreferences() {
@@ -110,8 +117,8 @@ function hydrateLocalPreferences() {
 
 function renderLayoutMode() {
   const layoutMode = normalizeLayoutMode(state.layoutMode);
-  elements.remoteShell?.classList.toggle("layout-mode-normal", layoutMode === "normal");
-  elements.remoteShell?.classList.toggle("layout-mode-hardcore", layoutMode === "hardcore");
+  elements.remoteShell?.classList.toggle("layout-mode-basic", layoutMode === "basic");
+  elements.remoteShell?.classList.toggle("layout-mode-full", layoutMode === "full");
   elements.layoutModeSwitch?.querySelectorAll("button[data-layout-mode]").forEach((button) => {
     button.classList.toggle("active", button.dataset.layoutMode === layoutMode);
   });
@@ -267,7 +274,11 @@ function renderSearchResults(items) {
 }
 
 async function handleGatchaDraw() {
-  setFormMessage("正在随机抽取一首歌曲...");
+  if (gatchaCooldownRemainingSeconds() > 0) {
+    syncGatchaCooldownButtons();
+    return;
+  }
+  setGatchaMessage("正在随机抽取一首歌曲...");
   try {
     const response = await fetch("/api/gatcha/candidate", { headers: clientHeaders() });
     const payload = await response.json();
@@ -277,11 +288,53 @@ async function handleGatchaDraw() {
 
     state.gatchaCandidate = payload.data;
     elements.gatchaCandidateTitle.textContent = state.gatchaCandidate.title;
+    startGatchaCooldown();
     elements.gatchaInitView.classList.add("hidden");
     elements.gatchaResultView.classList.remove("hidden");
-    setFormMessage("已经抽到一首歌了。");
+    setGatchaMessage("");
   } catch (error) {
-    setFormMessage(error.message, true);
+    setGatchaMessage(error.message, true);
+  }
+}
+
+function setGatchaMessage(message, isError = false) {
+  if (!elements.gatchaMessage) {
+    return;
+  }
+  elements.gatchaMessage.textContent = message || "";
+  elements.gatchaMessage.classList.toggle("is-error", Boolean(isError));
+}
+
+function gatchaCooldownRemainingSeconds() {
+  return Math.max(0, Math.ceil((state.gatchaCooldownUntil - Date.now()) / 1000));
+}
+
+function startGatchaCooldown() {
+  state.gatchaCooldownUntil = Date.now() + gatchaCooldownMs;
+  syncGatchaCooldownButtons();
+  if (state.gatchaCooldownTimer) {
+    clearInterval(state.gatchaCooldownTimer);
+  }
+  state.gatchaCooldownTimer = setInterval(() => {
+    syncGatchaCooldownButtons();
+    if (gatchaCooldownRemainingSeconds() <= 0) {
+      clearInterval(state.gatchaCooldownTimer);
+      state.gatchaCooldownTimer = null;
+    }
+  }, 250);
+}
+
+function syncGatchaCooldownButtons() {
+  const remainingSeconds = gatchaCooldownRemainingSeconds();
+  const coolingDown = remainingSeconds > 0;
+  const cooldownText = `等待 ${remainingSeconds}s`;
+  if (elements.gatchaButton) {
+    elements.gatchaButton.disabled = coolingDown;
+    elements.gatchaButton.textContent = coolingDown ? cooldownText : "试试运气";
+  }
+  if (elements.gatchaRetryButton) {
+    elements.gatchaRetryButton.disabled = coolingDown;
+    elements.gatchaRetryButton.textContent = coolingDown ? cooldownText : "重新再来";
   }
 }
 
@@ -443,7 +496,7 @@ function renderRemoteAvSyncControls(playbackMode, playerSettings) {
   if (!elements.remoteAvSyncPanel || !elements.remoteAvOffsetInput) {
     return;
   }
-  const isLocalMode = playbackMode === "local" && state.layoutMode === "hardcore";
+  const isLocalMode = playbackMode === "local" && normalizeLayoutMode(state.layoutMode) === "full";
   elements.remoteAvSyncPanel.classList.toggle("hidden", !isLocalMode);
   elements.remoteAvOffsetInput.value = String(currentRemoteAvOffsetMs(playerSettings));
 }
@@ -452,7 +505,7 @@ function renderRemoteVolumeControls(playbackMode, playerSettings) {
   if (!elements.remoteVolumePanel || !elements.remoteVolumeSlider || !elements.remoteVolumeMuteButton || !elements.remoteVolumeValue) {
     return;
   }
-  const isLocalMode = playbackMode === "local" && state.layoutMode === "hardcore";
+  const isLocalMode = playbackMode === "local" && normalizeLayoutMode(state.layoutMode) === "full";
   elements.remoteVolumePanel.classList.toggle("hidden", !isLocalMode);
   const volumePercent = currentRemoteVolumePercent(playerSettings);
   const isMuted = currentRemoteMuted(playerSettings);
