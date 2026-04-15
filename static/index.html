@@ -7,7 +7,7 @@
     <link rel="stylesheet" href="/styles.css" />
   </head>
   <body>
-    <div class="app-shell">
+    <div class="app-shell layout-mode-hardcore" id="app-shell">
       <section class="backup-banner hidden" id="backup-banner">
         <div class="backup-copy">
           <p class="backup-title">Auto Restore</p>
@@ -26,7 +26,52 @@
           <p class="designer">@VZRXS</p>
         </div>
         <div class="top-controls">
-          <div class="mode-control">
+          <div class="mode-control remote-mini-control" id="remote-mini-control">
+            <span class="control-label">手机点歌</span>
+            <div class="remote-mini-trigger">
+              <div class="remote-mini-qr-wrap">
+                <img
+                  id="remote-mini-qr-image"
+                  class="remote-mini-qr-image hidden"
+                  alt="手机访问二维码缩略图"
+                />
+                <div id="remote-mini-qr-placeholder" class="remote-mini-qr-placeholder">
+                  生成中
+                </div>
+              </div>
+            </div>
+            <div class="remote-mini-popover">
+              <div class="remote-card remote-mini-popover-card">
+                <div class="remote-qr-wrap remote-mini-popover-qr-wrap">
+                  <img
+                    id="remote-popover-qr-image"
+                    class="remote-qr-image hidden"
+                    alt="手机访问二维码"
+                  />
+                  <div id="remote-popover-qr-placeholder" class="remote-qr-placeholder">
+                    正在生成二维码...
+                  </div>
+                </div>
+                <div class="remote-copy">
+                  <p class="remote-copy-label">手机浏览器打开</p>
+                  <a id="remote-popover-url-link" class="remote-url-link" href="/remote" target="_blank" rel="noreferrer">
+                    /remote
+                  </a>
+                  <p id="remote-popover-url-hint" class="remote-url-hint">
+                    请确保手机和服务端在同一个局域网内。
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="mode-control layout-control">
+            <span class="control-label">切换布局</span>
+            <div class="mode-switch" id="layout-mode-switch">
+              <button class="mode-button" data-layout-mode="normal">普通模式</button>
+              <button class="mode-button active" data-layout-mode="hardcore">硬核模式</button>
+            </div>
+          </div>
+          <div class="mode-control playback-control">
             <span class="control-label">播放模式</span>
             <div class="mode-switch" id="mode-switch">
               <button class="mode-button active" data-mode="local">本地播放</button>
@@ -316,7 +361,7 @@
           <form id="search-form" class="search-inputs">
             <div class="input-group">
               <label>Title</label>
-              <input type="text" id="search-query" placeholder="Search in cached titles" autocomplete="off">
+              <input type="text" id="search-query" placeholder="搜索本地歌曲目录(需要登陆或者cookie)" autocomplete="off">
             </div>
             <button type="submit" id="search-button" class="next-button">搜索</button>
           </form>
