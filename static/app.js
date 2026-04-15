@@ -4,6 +4,7 @@ const stalledRetrySeconds = 5;
 const localPlayerSyncIntervalMs = 120;
 const audioVariantSwitchDebounceMs = 350;
 const maxAvOffsetMs = 5000;
+const playerClickDelayMs = 220;
 const storageKeys = {
   playerVolume: "bilikara.player.volume",
   playerMuted: "bilikara.player.muted",
@@ -37,6 +38,7 @@ const state = {
   pendingPlaybackRestore: null,
   lastAppliedPlayerControlSeq: 0,
   lastReportedPlayerStatusSignature: "",
+  playerFrameClickTimer: null,
   dragItemId: "",
   dragTargetId: "",
   dragTargetAfter: false,
@@ -228,7 +230,42 @@ async function togglePlayerFullscreen() {
   await requestElementFullscreen(elements.playerPanel);
 }
 
+function clearPlayerFrameClickTimer() {
+  if (!state.playerFrameClickTimer) {
+    return;
+  }
+  window.clearTimeout(state.playerFrameClickTimer);
+  state.playerFrameClickTimer = null;
+}
+
+function toggleMountedLocalPlayback() {
+  if (state.data?.playback_mode !== "local" || !state.data?.current_item) {
+    return false;
+  }
+  const video = activePrimaryVideoElement();
+  if (!video) {
+    return false;
+  }
+  if (video.paused) {
+    state.localShouldBePlaying = true;
+    video.play().catch(() => {});
+  } else {
+    state.localShouldBePlaying = false;
+    video.pause();
+  }
+  return true;
+}
+
+function queuePlayerFrameSingleClick() {
+  clearPlayerFrameClickTimer();
+  state.playerFrameClickTimer = window.setTimeout(() => {
+    state.playerFrameClickTimer = null;
+    toggleMountedLocalPlayback();
+  }, playerClickDelayMs);
+}
+
 async function handlePlayerFrameDoubleClick() {
+  clearPlayerFrameClickTimer();
   if (!supportsPlayerFullscreen()) {
     return;
   }
@@ -1213,9 +1250,6 @@ function renderPlayer(currentItem, playbackMode) {
     const video = elements.playerFrame.querySelector('video[data-player-role="video"]');
     const audio = elements.playerFrame.querySelector('audio[data-player-role="audio"]');
     if (video && audio) {
-      video.addEventListener("dblclick", () => {
-        handlePlayerFrameDoubleClick().catch(() => {});
-      });
       applyStoredVolumeToSplitPlayer(video, audio);
       const reportCurrentVideoStatus = () => {
         reportPlayerStatus(currentItem.id, video);
@@ -1331,9 +1365,6 @@ function renderPlayer(currentItem, playbackMode) {
     `;
     const video = elements.playerFrame.querySelector("video");
     if (video) {
-      video.addEventListener("dblclick", () => {
-        handlePlayerFrameDoubleClick().catch(() => {});
-      });
       video.volume = state.localPlayerVolume;
       video.muted = state.localPlayerMuted;
       const reportCurrentVideoStatus = () => {
@@ -2462,6 +2493,16 @@ elements.historyToggleButton.addEventListener("click", () => {
 elements.playerFullscreenButton?.addEventListener("click", async () => {
   await togglePlayerFullscreen();
   renderPlayerFullscreenButton();
+});
+
+elements.playerFrame?.addEventListener("click", (event) => {
+  if (event.target.closest("button, input, select, textarea, a")) {
+    return;
+  }
+  if (!event.target.closest("video")) {
+    return;
+  }
+  queuePlayerFrameSingleClick();
 });
 
 elements.playerFrame?.addEventListener("dblclick", (event) => {
