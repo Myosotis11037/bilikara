@@ -15,6 +15,8 @@ from urllib.parse import parse_qs, unquote, urlparse
 
 from .bilibili import (
     BilibiliError,
+    MISSING_BILIBILI_COOKIE_MESSAGE,
+    effective_bilibili_cookie,
     fetch_gatcha_candidate,
     fetch_owner_info,
     fetch_video_item,
@@ -657,14 +659,13 @@ class BilikaraHandler(BaseHTTPRequestHandler):
             if route == "/api/config/cookie":
                 sessdata = str(body.get("sessdata", "")).strip()
                 jct = str(body.get("bili_jct", "")).strip()
-                if not sessdata or not jct:
-                    raise ValueError("缺少必要的 Cookie 字段")
                 import bilikara.config as cfg
-                new_cookie_string = f"SESSDATA={sessdata}; bili_jct={jct}"
-                cfg.COOKIE = new_cookie_string
-                # print(f"[debug] cookie updated: {new_cookie_string}")
-                from .bilibili import BILIBILI_HEADERS
-                BILIBILI_HEADERS["Cookie"] = new_cookie_string
+                if sessdata or jct:
+                    if not sessdata or not jct:
+                        raise ValueError(MISSING_BILIBILI_COOKIE_MESSAGE)
+                    cfg.COOKIE = f"SESSDATA={sessdata}; bili_jct={jct}"
+                if not effective_bilibili_cookie():
+                    raise ValueError(MISSING_BILIBILI_COOKIE_MESSAGE)
                 refresh_gatcha_cache_in_background()
                 self._write_json({"ok": True, "message": "配置已实时生效"})
                 return

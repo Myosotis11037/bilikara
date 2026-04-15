@@ -513,7 +513,7 @@ function renderSearchResults(items) {
     button.type = "button";
     button.className = "next-button";
     button.dataset.url = String(item.url || "");
-    button.textContent = "Add";
+    button.textContent = "点歌";
 
     meta.append(title, url);
     row.append(meta, button);
@@ -3237,7 +3237,7 @@ elements.gatchaConfirmButton.addEventListener("click", async () => {
 
   const url = state.gatchaCandidate.url;
   const requesterName = selectedRequesterName();
-  setFormMessage("Nozomi power注入！");
+  setGatchaMessage("Nozomi power注入！");
   try {
     state.data = await submitAddRequest(url, "tail", { requesterName });
     setFormMessage(`点歌成功：${state.gatchaCandidate.title}`);
@@ -3265,7 +3265,7 @@ elements.gatchaConfirmButton.addEventListener("click", async () => {
       });
       return;
     }
-    setFormMessage(error.message, true);
+    setGatchaMessage(error.message, true);
   }
 });
 
@@ -3273,22 +3273,17 @@ elements.saveCookieButton.addEventListener("click", async () => {
   const sessdata = elements.cookieSessdata.value.trim();
   const jct = elements.cookieJct.value.trim();
 
-  if (!sessdata || !jct) {
-    setFormMessage("请填写完整的 SESSDATA 和 bili_jct", true);
-    return;
-  }
-
-  setFormMessage("正在更新 Cookie 配置...");
+  setGatchaMessage("正在更新 Cookie 配置...");
   try {
-    const result = await apiPost("/api/config/cookie", {
+    await apiPost("/api/config/cookie", {
       sessdata: sessdata,
       bili_jct: jct
     });
-    setFormMessage("Cookie 已更新,正在拉取稿件信息(第一次拉取稿件数量会影响拉取时间)");
+    setGatchaMessage("Cookie 已更新，正在拉取稿件信息（第一次拉取稿件数量会影响拉取时间）");
     elements.cookieSessdata.value = "";
     elements.cookieJct.value = "";
   } catch (error) {
-    setFormMessage(error.message, true);
+    setGatchaMessage(error.message, true);
   }
 });
 
