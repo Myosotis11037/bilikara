@@ -11,8 +11,11 @@
   --red: #b14545;
   --shadow: 0 24px 60px rgba(88, 56, 30, 0.14);
   --action-button-width: 96px;
-  --top-controls-width: 404px;
+  --top-controls-width: 868px;
   --status-chip-width: 164px;
+  --layout-control-width: 240px;
+  --remote-mini-control-width: 200px;
+  --playback-control-width: 228px;
   --font-sans: "IBM Plex Sans", "Noto Sans SC", "PingFang SC", "Microsoft YaHei",
     sans-serif;
   --font-display: "Avenir Next", "Trebuchet MS", "Noto Sans SC", sans-serif;
@@ -274,6 +277,92 @@ h2 {
   min-width: 0;
 }
 
+.layout-control {
+  width: var(--layout-control-width);
+  min-width: var(--layout-control-width);
+  flex: 0 0 var(--layout-control-width);
+}
+
+.playback-control {
+  width: var(--playback-control-width);
+  min-width: var(--playback-control-width);
+  flex: 0 0 var(--playback-control-width);
+}
+
+.remote-mini-control {
+  position: relative;
+  width: var(--remote-mini-control-width);
+  min-width: var(--remote-mini-control-width);
+  flex: 0 0 var(--remote-mini-control-width);
+}
+
+.remote-mini-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 1 1 auto;
+}
+
+.remote-mini-qr-wrap {
+  width: 66px;
+  height: 66px;
+  margin-top: -3px;
+  border-radius: 0;
+  background: rgba(255, 255, 255, 0.86);
+  border: 1px solid rgba(87, 63, 43, 0.08);
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.92);
+}
+
+.remote-mini-qr-image {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.remote-mini-qr-placeholder {
+  padding: 8px;
+  text-align: center;
+  font-size: 11px;
+  line-height: 1.35;
+  color: var(--muted);
+}
+
+.remote-mini-popover {
+  position: absolute;
+  top: calc(100% + 12px);
+  left: 0;
+  width: min(360px, calc(100vw - 32px));
+  visibility: hidden;
+  transform: translateY(0);
+  transition: visibility 0s linear 0s;
+  pointer-events: none;
+  z-index: 130;
+}
+
+.remote-mini-control:hover .remote-mini-popover,
+.remote-mini-control:focus-within .remote-mini-popover {
+  visibility: visible;
+  transform: translateY(0);
+  pointer-events: auto;
+}
+
+.remote-mini-popover-card {
+  background: rgb(255, 250, 244);
+  box-shadow: var(--shadow);
+}
+
+.remote-mini-popover .remote-mini-popover-card {
+  background: rgb(255, 250, 244);
+}
+
+.remote-mini-popover-qr-wrap {
+  width: 160px;
+  height: 160px;
+}
+
 .status-chip {
   width: var(--status-chip-width);
   min-width: var(--status-chip-width);
@@ -475,6 +564,24 @@ h2 {
 .mode-button.active {
   background: var(--accent);
   color: white;
+}
+
+.app-shell.layout-mode-normal .bottom-grid,
+.app-shell.layout-mode-normal .search-sub-card,
+.app-shell.layout-mode-normal .cookie-sub-card,
+.app-shell.layout-mode-normal .av-sync-panel,
+.app-shell.layout-mode-normal .volume-panel {
+  display: none;
+}
+
+.app-shell.layout-mode-hardcore .remote-mini-control {
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.app-shell.layout-mode-hardcore .remote-mini-popover {
+  visibility: hidden;
+  pointer-events: none;
 }
 
 .layout {
@@ -2065,6 +2172,24 @@ select:disabled {
     width: 100%;
     flex: 1 1 auto;
     min-width: 100%;
+  }
+
+  .layout-control {
+    width: 100%;
+    min-width: 100%;
+    flex: 1 1 auto;
+  }
+
+  .playback-control {
+    width: 100%;
+    min-width: 100%;
+    flex: 1 1 auto;
+  }
+
+  .remote-mini-control {
+    width: 100%;
+    min-width: 100%;
+    flex: 1 1 auto;
   }
 
   .cache-panel {

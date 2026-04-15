@@ -9,6 +9,7 @@ const storageKeys = {
   playerVolume: "bilikara.player.volume",
   playerMuted: "bilikara.player.muted",
   avOffsetMs: "bilikara.player.av_offset_ms",
+  layoutMode: "bilikara.layout.mode",
 };
 
 const state = {
@@ -45,9 +46,11 @@ const state = {
   confirmIntent: null,
   retryActivityById: {},
   gatchaCandidate: null,
+  layoutMode: "hardcore",
 };
 
 const elements = {
+  appShell: document.getElementById("app-shell"),
   bbdownStatus: document.getElementById("bbdown-status"),
   cacheChipMeta: document.getElementById("cache-chip-meta"),
   cacheSettings: document.getElementById("cache-settings"),
@@ -93,6 +96,7 @@ const elements = {
   queueCurrentRetry: document.getElementById("queue-current-retry"),
   listStage: document.getElementById("list-stage"),
   modeSwitch: document.getElementById("mode-switch"),
+  layoutModeSwitch: document.getElementById("layout-mode-switch"),
   nextButton: document.getElementById("next-button"),
   queueNextButton: document.getElementById("queue-next-button"),
   historyToggleButton: document.getElementById("history-toggle-button"),
@@ -108,6 +112,12 @@ const elements = {
   remoteQrPlaceholder: document.getElementById("remote-qr-placeholder"),
   remoteUrlLink: document.getElementById("remote-url-link"),
   remoteUrlHint: document.getElementById("remote-url-hint"),
+  remoteMiniQrImage: document.getElementById("remote-mini-qr-image"),
+  remoteMiniQrPlaceholder: document.getElementById("remote-mini-qr-placeholder"),
+  remotePopoverQrImage: document.getElementById("remote-popover-qr-image"),
+  remotePopoverQrPlaceholder: document.getElementById("remote-popover-qr-placeholder"),
+  remotePopoverUrlLink: document.getElementById("remote-popover-url-link"),
+  remotePopoverUrlHint: document.getElementById("remote-popover-url-hint"),
   gatchaButton: document.getElementById("gatcha-button"),
   gatchaConfirmButton: document.getElementById("gatcha-confirm-button"),
   gatchaRetryButton: document.getElementById("gatcha-retry-button"),
@@ -301,6 +311,15 @@ function readLocalBoolean(key, fallbackValue) {
   }
 }
 
+function readLocalString(key, fallbackValue) {
+  try {
+    const rawValue = window.localStorage?.getItem(key);
+    return rawValue == null ? fallbackValue : String(rawValue);
+  } catch {
+    return fallbackValue;
+  }
+}
+
 function writeLocalPreference(key, value) {
   try {
     window.localStorage?.setItem(key, String(value));
@@ -315,6 +334,31 @@ function hydrateLocalPreferences() {
     Math.min(1, readLocalNumber(storageKeys.playerVolume, state.localPlayerVolume)),
   );
   state.localPlayerMuted = readLocalBoolean(storageKeys.playerMuted, state.localPlayerMuted);
+  state.layoutMode = normalizeLayoutMode(readLocalString(storageKeys.layoutMode, state.layoutMode));
+}
+
+function normalizeLayoutMode(value) {
+  return value === "normal" ? "normal" : "hardcore";
+}
+
+function renderLayoutMode() {
+  const layoutMode = normalizeLayoutMode(state.layoutMode);
+  elements.appShell?.classList.toggle("layout-mode-normal", layoutMode === "normal");
+  elements.appShell?.classList.toggle("layout-mode-hardcore", layoutMode === "hardcore");
+  elements.layoutModeSwitch?.querySelectorAll("button[data-layout-mode]").forEach((button) => {
+    button.classList.toggle("active", button.dataset.layoutMode === layoutMode);
+  });
+}
+
+function setLayoutMode(mode) {
+  const nextMode = normalizeLayoutMode(mode);
+  if (state.layoutMode === nextMode) {
+    renderLayoutMode();
+    return;
+  }
+  state.layoutMode = nextMode;
+  writeLocalPreference(storageKeys.layoutMode, nextMode);
+  renderLayoutMode();
 }
 
 function rememberedAvOffsetMs() {
@@ -509,9 +553,10 @@ function render() {
   renderCacheSettings(data.bbdown, data.ffmpeg, data.cache_policy);
   renderRemoteAccess(data.remote_access);
 
-  document.querySelectorAll(".mode-button").forEach((button) => {
+  elements.modeSwitch?.querySelectorAll(".mode-button").forEach((button) => {
     button.classList.toggle("active", button.dataset.mode === data.playback_mode);
   });
+  renderLayoutMode();
 
   renderAudioVariantBar(currentItem, data.playback_mode);
   renderAvSyncControls(data.playback_mode, data.player_settings);
@@ -652,6 +697,78 @@ function renderRemoteQr(url) {
     elements.remoteQrPlaceholder.classList.remove("hidden");
   };
   elements.remoteQrImage.src = qrUrl;
+}
+
+function renderRemoteAccess(remoteAccess) {
+  const preferredUrl = String(remoteAccess?.preferred_url || "");
+  const lanUrls = Array.isArray(remoteAccess?.lan_urls) ? remoteAccess.lan_urls : [];
+  const localUrl = String(remoteAccess?.local_url || "");
+  const displayUrl = preferredUrl || localUrl || `${window.location.origin}/remote`;
+  const displayHint = lanUrls.length > 1
+    ? `可用局域网地址: ${lanUrls.join(" · ")}`
+    : lanUrls.length === 1
+      ? "请确保手机和服务端在同一个局域网内。"
+      : "暂未检测到局域网地址，可稍后刷新或手动检查网络。";
+
+  [elements.remoteUrlLink, elements.remotePopoverUrlLink].forEach((link) => {
+    if (!link) {
+      return;
+    }
+    link.href = displayUrl;
+    link.textContent = displayUrl;
+  });
+
+  [elements.remoteUrlHint, elements.remotePopoverUrlHint].forEach((hint) => {
+    if (hint) {
+      hint.textContent = displayHint;
+    }
+  });
+
+  renderRemoteQr(displayUrl, [
+    { image: elements.remoteQrImage, placeholder: elements.remoteQrPlaceholder, size: 220 },
+    { image: elements.remotePopoverQrImage, placeholder: elements.remotePopoverQrPlaceholder, size: 220 },
+    { image: elements.remoteMiniQrImage, placeholder: elements.remoteMiniQrPlaceholder, size: 132 },
+  ]);
+}
+
+function renderRemoteQr(url, targets = []) {
+  const normalizedUrl = String(url || "").trim();
+  if (!normalizedUrl) {
+    targets.forEach(({ image, placeholder }) => {
+      image?.classList.add("hidden");
+      if (placeholder) {
+        placeholder.textContent = "暂无可用访问地址";
+        placeholder.classList.remove("hidden");
+      }
+    });
+    return;
+  }
+
+  targets.forEach(({ image, placeholder, size = 220 }) => {
+    if (!image || !placeholder) {
+      return;
+    }
+
+    const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=${size}x${size}&margin=0&data=${encodeURIComponent(normalizedUrl)}`;
+    if (image.dataset.qrUrl === qrUrl) {
+      return;
+    }
+
+    image.dataset.qrUrl = qrUrl;
+    image.classList.add("hidden");
+    placeholder.textContent = "正在生成二维码...";
+    placeholder.classList.remove("hidden");
+    image.onload = () => {
+      placeholder.classList.add("hidden");
+      image.classList.remove("hidden");
+    };
+    image.onerror = () => {
+      image.classList.add("hidden");
+      placeholder.textContent = "二维码生成失败，请稍后重试";
+      placeholder.classList.remove("hidden");
+    };
+    image.src = qrUrl;
+  });
 }
 
 async function copyRemoteUrl() {
@@ -2548,6 +2665,14 @@ elements.modeSwitch.addEventListener("click", async (event) => {
   }
 });
 
+elements.layoutModeSwitch?.addEventListener("click", (event) => {
+  const button = event.target.closest("button[data-layout-mode]");
+  if (!button) {
+    return;
+  }
+  setLayoutMode(button.dataset.layoutMode);
+});
+
 elements.audioVariantBar.addEventListener("click", async (event) => {
   const button = event.target.closest("button[data-variant-id]");
   if (!button || !state.data?.current_item || audioVariantSwitchLocked()) {
@@ -2903,6 +3028,7 @@ elements.saveCookieButton.addEventListener("click", async () => {
 
 async function startPolling() {
   hydrateLocalPreferences();
+  renderLayoutMode();
   try {
     await fetchState();
   } catch (error) {
